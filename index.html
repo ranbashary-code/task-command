@@ -5,38 +5,41 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מערכת המשימות</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
 :root {
-  --violet: #7C5CFC;
-  --violet-soft: #F3F0FF;
+  --violet: #2BB5A3;
+  --violet-soft: #E6FAF7;
   --red: #F43F5E;
-  --amber: #F59E0B;
-  --blue: #3B82F6;
-  --green: #10B981;
+  --amber: #FFCF6E;
+  --blue: #42B4E6;
+  --green: #42E6D2;
   --slate: #94A3B8;
+  --coral: #FF8E72;
+  --gold: #FFCB6B;
+  --mint: #42E6D2;
 }
 [data-theme="light"] {
-  --canvas: #F4F3F8; --surface: #FFFFFF; --surface-alt: #F7F6FB;
-  --border: #EAE7F0; --border-soft: #F0EEF5;
-  --text: #221B33; --text-soft: #475569; --text-mute: #94A3B8;
-  --banner-bg: #FFFFFF; --input-bg: #FFFFFF; --drill-bg: #F3F0FF;
-  --overlay: rgba(0,0,0,.4); --shadow: rgba(34,27,51,.15);
+  --canvas: #F7FAFA; --surface: #FFFFFF; --surface-alt: #F0F6F5;
+  --border: #D9E8E5; --border-soft: #E8F0EE;
+  --text: #1A2C2A; --text-soft: #3D5654; --text-mute: #8CA3A0;
+  --banner-bg: #FFFFFF; --input-bg: #FFFFFF; --drill-bg: #E6FAF7;
+  --overlay: rgba(0,0,0,.35); --shadow: rgba(26,44,42,.12);
 }
 [data-theme="dark"] {
-  --canvas: #14111C; --surface: #1E1A28; --surface-alt: #262031;
-  --border: #2E2840; --border-soft: #272231;
-  --text: #ECEAF2; --text-soft: #B5B0C4; --text-mute: #827D93;
-  --banner-bg: #1A1624; --input-bg: #262031; --drill-bg: #251C3A;
-  --overlay: rgba(0,0,0,.6); --shadow: rgba(0,0,0,.4);
+  --canvas: #131830; --surface: #1A2044; --surface-alt: #212752;
+  --border: #2A3260; --border-soft: #232A54;
+  --text: #F1FDFB; --text-soft: #B0C4C0; --text-mute: #6B7F8E;
+  --banner-bg: #161C3C; --input-bg: #212752; --drill-bg: #1E2650;
+  --overlay: rgba(0,0,0,.55); --shadow: rgba(0,0,0,.4);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Heebo', system-ui, sans-serif;
+  font-family: 'Rubik', 'Heebo', system-ui, sans-serif;
   background: var(--canvas); color: var(--text);
   min-height: 100vh; font-size: 15px;
   transition: background .3s, color .3s;
@@ -50,22 +53,22 @@ a { color: var(--violet); text-decoration: none; }
 /* LOGIN */
 .login-screen {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #241B36 0%, #2E2247 50%, #3A2C57 100%);
+  background: linear-gradient(135deg, #131830 0%, #1A2044 50%, #1E2650 100%);
 }
 .login-card {
-  background: var(--surface); border-radius: 24px; padding: 48px 40px; text-align: center;
-  box-shadow: 0 20px 60px rgba(0,0,0,.3); max-width: 400px; width: 90%;
+  background: #FFFFFF; border-radius: 24px; padding: 48px 40px; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3); max-width: 400px; width: 90%; color: #1A2C2A;
 }
 .login-card h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
-.login-card p { color: var(--text-soft); margin-bottom: 32px; font-size: 14px; }
+.login-card p { color: #3D5654; margin-bottom: 32px; font-size: 14px; }
 .login-logo {
-  width: 64px; height: 64px; border-radius: 18px; background: var(--violet);
+  width: 64px; height: 64px; border-radius: 18px; background: linear-gradient(135deg, #2BB5A3 0%, #42E6D2 100%);
   display: grid; place-items: center; color: #fff; font-size: 28px; font-weight: 800;
-  margin: 0 auto 20px;
+  margin: 0 auto 20px; box-shadow: 0 8px 24px rgba(43,181,163,.35);
 }
 .btn-google {
   display: inline-flex; align-items: center; gap: 10px; padding: 12px 28px;
-  background: var(--violet); color: #fff; border-radius: 14px; font-weight: 600;
+  background: linear-gradient(120deg, #FF8E72 0%, #FFCB6B 100%); color: #1A2C2A; border-radius: 14px; font-weight: 700;
   font-size: 15px; transition: .2s;
 }
 .btn-google:hover { filter: brightness(1.1); transform: translateY(-1px); }
@@ -80,8 +83,9 @@ a { color: var(--violet); text-decoration: none; }
 }
 .brand { display: flex; align-items: center; gap: 10px; margin-left: 8px; }
 .brand-icon {
-  width: 36px; height: 36px; border-radius: 12px; background: var(--violet);
+  width: 36px; height: 36px; border-radius: 12px; background: linear-gradient(135deg, #2BB5A3 0%, #42E6D2 100%);
   display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 16px;
+  box-shadow: 0 4px 12px rgba(43,181,163,.3);
 }
 .brand-name { font-weight: 700; font-size: 14px; }
 .brand-sub { font-size: 11px; color: var(--text-mute); }
@@ -109,8 +113,8 @@ a { color: var(--violet); text-decoration: none; }
 }
 .btn-primary {
   display: flex; align-items: center; gap: 6px; padding: 8px 16px;
-  background: var(--violet); color: #fff; border-radius: 12px; font-weight: 600;
-  font-size: 13px; transition: .2s;
+  background: linear-gradient(120deg, #2BB5A3 0%, #42E6D2 100%); color: #fff; border-radius: 12px; font-weight: 600;
+  font-size: 13px; transition: .2s; box-shadow: 0 2px 8px rgba(43,181,163,.25);
 }
 .btn-primary:hover { filter: brightness(1.1); }
 .search-box {
@@ -461,10 +465,10 @@ const PRIO_MAP = {
   low:    { label: "נמוך",  color: "#10B981" },
 };
 const DEFAULT_CATS = [
-  { id: "c1", name: "אסטרטגיה דיגיטלית", color: "#7C5CFC" },
-  { id: "c2", name: "פרויקטי אגף",        color: "#3B82F6" },
-  { id: "c3", name: "תפעול ושוטף",        color: "#F59E0B" },
-  { id: "c4", name: "ישיבות ומעקב",       color: "#10B981" },
+  { id: "c1", name: "אסטרטגיה דיגיטלית", color: "#2BB5A3" },
+  { id: "c2", name: "פרויקטי אגף",        color: "#42B4E6" },
+  { id: "c3", name: "תפעול ושוטף",        color: "#FF8E72" },
+  { id: "c4", name: "ישיבות ומעקב",       color: "#FFCB6B" },
 ];
 
 let tasks = [];
@@ -535,7 +539,7 @@ async function initData() {
   // Load people
   const pplSnap = await userDoc("people").get();
   if (pplSnap.empty) {
-    const me = { name: currentUser.displayName || "אני", email: currentUser.email, initials: (currentUser.displayName || "א").charAt(0), color: "#7C5CFC", isMe: true };
+    const me = { name: currentUser.displayName || "אני", email: currentUser.email, initials: (currentUser.displayName || "א").charAt(0), color: "#2BB5A3", isMe: true };
     await userDoc("people").doc("me").set(me);
     people = [{ id: "me", ...me }];
   } else {
@@ -1137,7 +1141,7 @@ async function tagPerson(taskId, personId) {
 /* ============================================================
    ADMIN PANEL
    ============================================================ */
-const PRESET_COLORS = ["#7C5CFC","#3B82F6","#F59E0B","#10B981","#F43F5E","#8B5CF6","#EC4899","#06B6D4","#84CC16","#F97316","#6366F1","#14B8A6"];
+const PRESET_COLORS = ["#2BB5A3","#FF8E72","#FFCB6B","#42E6D2","#42B4E6","#F43F5E","#A593FF","#F4ADC8","#84CC16","#F97316","#06B6D4","#14B8A6"];
 
 function renderAdmin(el) {
   const taskCount = tasks.length;
@@ -1169,7 +1173,7 @@ function renderAdmin(el) {
         `).join("")}
         <div class="admin-add-row">
           <input class="input" id="newCatName" placeholder="שם קטגוריה חדשה…">
-          <input type="color" class="admin-color-input" id="newCatColor" value="#7C5CFC" title="צבע">
+          <input type="color" class="admin-color-input" id="newCatColor" value="#2BB5A3" title="צבע">
           <button class="btn-primary" onclick="addCat()" style="white-space:nowrap">+ הוסף</button>
         </div>
       </div>
@@ -1375,12 +1379,9 @@ async function clearDoneConfirm() {
 }
 
 /* ============================================================
-   INIT THEME FROM PREFERENCE
+   INIT THEME — default to light
    ============================================================ */
-if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-  document.body.dataset.theme = "dark";
-  document.getElementById("themeBtn").textContent = "☀️";
-}
+// Light theme is default — user can toggle manually
 </script>
 </body>
 </html>
