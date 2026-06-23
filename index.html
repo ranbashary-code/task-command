@@ -308,6 +308,38 @@ textarea.input { resize: none; min-height: 70px; }
 /* EMPTY */
 .empty { text-align: center; padding: 48px 20px; color: var(--text-mute); font-size: 14px; }
 
+/* ADMIN */
+.admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
+.admin-section { margin-bottom: 8px; }
+.admin-section-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; }
+.admin-section-title { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.admin-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+  border-top: 1px solid var(--border-soft); transition: .15s;
+}
+.admin-item:hover { background: var(--surface-alt); }
+.admin-item-info { flex: 1; min-width: 0; }
+.admin-item-name { font-weight: 500; font-size: 14px; }
+.admin-item-sub { font-size: 12px; color: var(--text-mute); }
+.admin-actions { display: flex; gap: 6px; }
+.admin-btn {
+  width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+  border: 1px solid var(--border); font-size: 14px; transition: .2s;
+}
+.admin-btn:hover { background: var(--surface-alt); }
+.admin-btn.danger:hover { background: rgba(244,63,94,.1); color: var(--red); border-color: var(--red); }
+.color-dot { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+.admin-add-row {
+  display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border-soft);
+}
+.admin-add-row input, .admin-add-row select { flex: 1; }
+.admin-info-card { padding: 20px; }
+.admin-info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 14px; }
+.admin-info-label { color: var(--text-mute); }
+.admin-info-val { font-weight: 600; }
+.admin-color-input { width: 40px; height: 32px; border: none; border-radius: 6px; cursor: pointer; background: none; }
+
 /* HIDE */
 .hidden { display: none !important; }
 </style>
@@ -587,6 +619,7 @@ const VIEWS = [
   { id: "tasks", label: "משימות",   icon: "📋" },
   { id: "board", label: "לוח",      icon: "▦" },
   { id: "cal",   label: "לוח שנה",  icon: "📅" },
+  { id: "admin", label: "ניהול",    icon: "⚙️" },
 ];
 
 function renderNav() {
@@ -612,6 +645,7 @@ function renderView() {
     case "tasks": renderTasks(el); break;
     case "board": renderBoard(el); break;
     case "cal":   renderCalendar(el); break;
+    case "admin": renderAdmin(el); break;
   }
   // Update bell badge
   const overdue = tasks.filter(t => t.status !== "done" && t.due < todayISO()).length;
@@ -1101,8 +1135,244 @@ async function tagPerson(taskId, personId) {
 }
 
 /* ============================================================
-   ADD PEOPLE (quick from drawer)
+   ADMIN PANEL
    ============================================================ */
+const PRESET_COLORS = ["#7C5CFC","#3B82F6","#F59E0B","#10B981","#F43F5E","#8B5CF6","#EC4899","#06B6D4","#84CC16","#F97316","#6366F1","#14B8A6"];
+
+function renderAdmin(el) {
+  const taskCount = tasks.length;
+  const doneCount = tasks.filter(t => t.status === "done").length;
+
+  el.innerHTML = `
+    <h1 class="page-title">⚙️ ניהול המערכת</h1>
+    <p class="page-sub">ניהול קטגוריות, אנשים, רשימות סגורות והגדרות. שינויים נשמרים אוטומטית.</p>
+
+    <div class="admin-grid">
+      <!-- CATEGORIES -->
+      <div class="card admin-section">
+        <div class="admin-section-head">
+          <div class="admin-section-title">📁 קטגוריות</div>
+          <span style="font-size:12px;color:var(--text-mute)">${categories.length} קטגוריות</span>
+        </div>
+        ${categories.map((c, i) => `
+          <div class="admin-item" id="cat-${c.id}">
+            <div class="color-dot" style="background:${c.color}"></div>
+            <div class="admin-item-info">
+              <div class="admin-item-name">${c.name}</div>
+              <div class="admin-item-sub">${tasks.filter(t => t.cat === c.id).length} משימות</div>
+            </div>
+            <div class="admin-actions">
+              <button class="admin-btn" onclick="editCatPrompt('${c.id}')" title="ערוך">✏️</button>
+              <button class="admin-btn danger" onclick="deleteCat('${c.id}')" title="מחק">🗑</button>
+            </div>
+          </div>
+        `).join("")}
+        <div class="admin-add-row">
+          <input class="input" id="newCatName" placeholder="שם קטגוריה חדשה…">
+          <input type="color" class="admin-color-input" id="newCatColor" value="#7C5CFC" title="צבע">
+          <button class="btn-primary" onclick="addCat()" style="white-space:nowrap">+ הוסף</button>
+        </div>
+      </div>
+
+      <!-- PEOPLE -->
+      <div class="card admin-section">
+        <div class="admin-section-head">
+          <div class="admin-section-title">👥 אנשים</div>
+          <span style="font-size:12px;color:var(--text-mute)">${people.length} אנשים</span>
+        </div>
+        ${people.map(p => `
+          <div class="admin-item">
+            ${avatarHTML(p, true)}
+            <div class="admin-item-info">
+              <div class="admin-item-name">${p.name} ${p.isMe ? '<span style="color:var(--violet);font-size:11px">(אדמין — אתה)</span>' : ''}</div>
+              <div class="admin-item-sub">${p.email || 'ללא מייל'}</div>
+            </div>
+            <div class="admin-actions">
+              ${!p.isMe ? `
+                <button class="admin-btn" onclick="editPersonPrompt('${p.id}')" title="ערוך">✏️</button>
+                <button class="admin-btn danger" onclick="deletePerson('${p.id}')" title="מחק">🗑</button>
+              ` : ''}
+            </div>
+          </div>
+        `).join("")}
+        <div class="admin-add-row">
+          <input class="input" id="newPersonName" placeholder="שם…">
+          <input class="input" id="newPersonEmail" placeholder="מייל…" style="flex:1.5">
+          <input type="color" class="admin-color-input" id="newPersonColor" value="#3B82F6" title="צבע">
+          <button class="btn-primary" onclick="addPerson()" style="white-space:nowrap">+ הוסף</button>
+        </div>
+      </div>
+
+      <!-- STATUSES -->
+      <div class="card admin-section">
+        <div class="admin-section-head">
+          <div class="admin-section-title">🔄 סטטוסים</div>
+          <span style="font-size:12px;color:var(--text-mute)">רשימה סגורה</span>
+        </div>
+        ${Object.entries(STATUS_MAP).map(([k, s]) => `
+          <div class="admin-item">
+            <div class="color-dot" style="background:${s.color}"></div>
+            <div class="admin-item-info">
+              <div class="admin-item-name">${s.label}</div>
+              <div class="admin-item-sub">${tasks.filter(t => t.status === k).length} משימות · מזהה: ${k}</div>
+            </div>
+          </div>
+        `).join("")}
+        <div style="padding:12px 20px;font-size:12px;color:var(--text-mute);border-top:1px solid var(--border-soft)">
+          💡 הסטטוסים הם חלק מהמנגנון הבסיסי של המערכת. בעתיד תתווסף אפשרות להתאמה אישית.
+        </div>
+      </div>
+
+      <!-- PRIORITIES -->
+      <div class="card admin-section">
+        <div class="admin-section-head">
+          <div class="admin-section-title">⚑ עדיפויות</div>
+          <span style="font-size:12px;color:var(--text-mute)">רשימה סגורה</span>
+        </div>
+        ${Object.entries(PRIO_MAP).map(([k, p]) => `
+          <div class="admin-item">
+            <div class="color-dot" style="background:${p.color}"></div>
+            <div class="admin-item-info">
+              <div class="admin-item-name">${p.label}</div>
+              <div class="admin-item-sub">${tasks.filter(t => t.prio === k).length} משימות · מזהה: ${k}</div>
+            </div>
+          </div>
+        `).join("")}
+        <div style="padding:12px 20px;font-size:12px;color:var(--text-mute);border-top:1px solid var(--border-soft)">
+          💡 רמות העדיפות הן חלק מהמנגנון הבסיסי. בעתיד תתווסף אפשרות להתאמה אישית.
+        </div>
+      </div>
+    </div>
+
+    <!-- SYSTEM INFO -->
+    <div class="card admin-info-card" style="margin-top:20px">
+      <div class="admin-section-title" style="margin-bottom:16px">📋 מידע מערכת</div>
+      <div class="admin-info-row"><span class="admin-info-label">סך הכל משימות</span><span class="admin-info-val">${taskCount}</span></div>
+      <div class="admin-info-row"><span class="admin-info-label">משימות שהושלמו</span><span class="admin-info-val">${doneCount} (${taskCount ? Math.round(doneCount/taskCount*100) : 0}%)</span></div>
+      <div class="admin-info-row"><span class="admin-info-label">קטגוריות</span><span class="admin-info-val">${categories.length}</span></div>
+      <div class="admin-info-row"><span class="admin-info-label">אנשים</span><span class="admin-info-val">${people.length}</span></div>
+      <div class="admin-info-row"><span class="admin-info-label">אדמין</span><span class="admin-info-val">${currentUser?.displayName || currentUser?.email}</span></div>
+      <div class="admin-info-row"><span class="admin-info-label">פרויקט Firebase</span><span class="admin-info-val">task-command-e573f</span></div>
+      <div class="admin-info-row"><span class="admin-info-label">גרסה</span><span class="admin-info-val">1.0.0</span></div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <button class="btn-outline" onclick="exportData()">📥 ייצוא נתונים (JSON)</button>
+        <button class="btn-outline danger" style="color:var(--red);border-color:var(--red)" onclick="clearDoneConfirm()">🗑 מחק משימות שהושלמו</button>
+      </div>
+    </div>
+  `;
+}
+
+/* --- Category CRUD --- */
+async function addCat() {
+  const name = document.getElementById("newCatName").value.trim();
+  if (!name) return;
+  const color = document.getElementById("newCatColor").value;
+  const id = "c" + Date.now();
+  await userDoc("categories").doc(id).set({ name, color, order: categories.length });
+  categories.push({ id, name, color });
+  updateCatSelect();
+  showToast("✓ קטגוריה נוספה");
+  renderView();
+}
+
+function editCatPrompt(id) {
+  const c = categories.find(x => x.id === id);
+  if (!c) return;
+  const name = prompt("שם חדש לקטגוריה:", c.name);
+  if (name === null || !name.trim()) return;
+  const color = prompt("צבע (hex, למשל #3B82F6):", c.color);
+  updateCat(id, name.trim(), color || c.color);
+}
+
+async function updateCat(id, name, color) {
+  await userDoc("categories").doc(id).update({ name, color });
+  const c = categories.find(x => x.id === id);
+  if (c) { c.name = name; c.color = color; }
+  updateCatSelect();
+  showToast("✓ קטגוריה עודכנה");
+  renderView();
+}
+
+async function deleteCat(id) {
+  const count = tasks.filter(t => t.cat === id).length;
+  if (count > 0) { alert(`לא ניתן למחוק — יש ${count} משימות בקטגוריה הזו. העבר אותן קודם.`); return; }
+  if (!confirm("למחוק את הקטגוריה?")) return;
+  await userDoc("categories").doc(id).delete();
+  categories = categories.filter(x => x.id !== id);
+  updateCatSelect();
+  showToast("🗑 קטגוריה נמחקה");
+  renderView();
+}
+
+function updateCatSelect() {
+  const sel = document.getElementById("addCat");
+  if (sel) sel.innerHTML = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+}
+
+/* --- People CRUD --- */
+async function addPerson() {
+  const name = document.getElementById("newPersonName").value.trim();
+  if (!name) return;
+  const email = document.getElementById("newPersonEmail").value.trim();
+  const color = document.getElementById("newPersonColor").value;
+  const initials = name.split(" ").map(w => w.charAt(0)).join("").slice(0, 2);
+  const id = "p" + Date.now();
+  const person = { name, email, initials, color, isMe: false };
+  await userDoc("people").doc(id).set(person);
+  people.push({ id, ...person });
+  showToast("✓ איש קשר נוסף");
+  renderView();
+}
+
+function editPersonPrompt(id) {
+  const p = people.find(x => x.id === id);
+  if (!p) return;
+  const name = prompt("שם:", p.name);
+  if (name === null || !name.trim()) return;
+  const email = prompt("מייל:", p.email || "");
+  updatePerson(id, name.trim(), email || "");
+}
+
+async function updatePerson(id, name, email) {
+  const initials = name.split(" ").map(w => w.charAt(0)).join("").slice(0, 2);
+  await userDoc("people").doc(id).update({ name, email, initials });
+  const p = people.find(x => x.id === id);
+  if (p) { p.name = name; p.email = email; p.initials = initials; }
+  showToast("✓ איש קשר עודכן");
+  renderView();
+}
+
+async function deletePerson(id) {
+  const tagged = tasks.filter(t => (t.tags || []).includes(id)).length;
+  if (tagged > 0 && !confirm(`האדם מתויג ב-${tagged} משימות. למחוק בכל זאת? (התיוג יישאר אבל לא יוצג)`)) return;
+  if (tagged === 0 && !confirm("למחוק את איש הקשר?")) return;
+  await userDoc("people").doc(id).delete();
+  people = people.filter(x => x.id !== id);
+  showToast("🗑 איש קשר נמחק");
+  renderView();
+}
+
+/* --- Utilities --- */
+function exportData() {
+  const data = { tasks, categories, people, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `task-command-backup-${todayISO()}.json`;
+  a.click();
+  showToast("📥 הנתונים יוצאו בהצלחה");
+}
+
+async function clearDoneConfirm() {
+  const done = tasks.filter(t => t.status === "done");
+  if (!done.length) { showToast("אין משימות שהושלמו למחיקה"); return; }
+  if (!confirm(`למחוק ${done.length} משימות שהושלמו? פעולה זו בלתי הפיכה.`)) return;
+  for (const t of done) {
+    await userDoc("tasks").doc(t.id).delete();
+  }
+  await logActivity("מחק משימות שהושלמו", `${done.length} משימות`);
+  showToast(`🗑 ${done.length} משימות שהושלמו נמחקו`);
+}
 
 /* ============================================================
    INIT THEME FROM PREFERENCE
