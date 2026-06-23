@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מערכת המשימות</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --violet: #7C5CFC;
+  --violet-soft: #F3F0FF;
+  --red: #F43F5E;
+  --amber: #F59E0B;
+  --blue: #3B82F6;
+  --green: #10B981;
+  --slate: #94A3B8;
+}
+[data-theme="light"] {
+  --canvas: #F4F3F8; --surface: #FFFFFF; --surface-alt: #F7F6FB;
+  --border: #EAE7F0; --border-soft: #F0EEF5;
+  --text: #221B33; --text-soft: #475569; --text-mute: #94A3B8;
+  --banner-bg: #FFFFFF; --input-bg: #FFFFFF; --drill-bg: #F3F0FF;
+  --overlay: rgba(0,0,0,.4); --shadow: rgba(34,27,51,.15);
+}
+[data-theme="dark"] {
+  --canvas: #14111C; --surface: #1E1A28; --surface-alt: #262031;
+  --border: #2E2840; --border-soft: #272231;
+  --text: #ECEAF2; --text-soft: #B5B0C4; --text-mute: #827D93;
+  --banner-bg: #1A1624; --input-bg: #262031; --drill-bg: #251C3A;
+  --overlay: rgba(0,0,0,.6); --shadow: rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Heebo', system-ui, sans-serif;
+  background: var(--canvas); color: var(--text);
+  min-height: 100vh; font-size: 15px;
+  transition: background .3s, color .3s;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+input, select, textarea, button { font-family: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+a { color: var(--violet); text-decoration: none; }
+
+/* LOGIN */
+.login-screen {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #241B36 0%, #2E2247 50%, #3A2C57 100%);
+}
+.login-card {
+  background: var(--surface); border-radius: 24px; padding: 48px 40px; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3); max-width: 400px; width: 90%;
+}
+.login-card h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+.login-card p { color: var(--text-soft); margin-bottom: 32px; font-size: 14px; }
+.login-logo {
+  width: 64px; height: 64px; border-radius: 18px; background: var(--violet);
+  display: grid; place-items: center; color: #fff; font-size: 28px; font-weight: 800;
+  margin: 0 auto 20px;
+}
+.btn-google {
+  display: inline-flex; align-items: center; gap: 10px; padding: 12px 28px;
+  background: var(--violet); color: #fff; border-radius: 14px; font-weight: 600;
+  font-size: 15px; transition: .2s;
+}
+.btn-google:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.login-error { color: var(--red); font-size: 13px; margin-top: 16px; }
+
+/* BANNER */
+.banner {
+  position: sticky; top: 0; z-index: 30; background: var(--banner-bg);
+  border-bottom: 1px solid var(--border); padding: 10px 24px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  transition: background .3s, border-color .3s;
+}
+.brand { display: flex; align-items: center; gap: 10px; margin-left: 8px; }
+.brand-icon {
+  width: 36px; height: 36px; border-radius: 12px; background: var(--violet);
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 16px;
+}
+.brand-name { font-weight: 700; font-size: 14px; }
+.brand-sub { font-size: 11px; color: var(--text-mute); }
+.nav-tabs {
+  display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-alt);
+}
+.nav-tab {
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px;
+  border-radius: 10px; font-size: 13px; font-weight: 500; transition: .2s;
+  color: var(--text-soft);
+}
+.nav-tab.active { background: var(--violet); color: #fff; font-weight: 600; }
+.nav-tab:hover:not(.active) { background: var(--border-soft); }
+.spacer { flex: 1; }
+.icon-btn {
+  width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--surface-alt); border: 1px solid var(--border); position: relative;
+  transition: .2s;
+}
+.icon-btn:hover { background: var(--border-soft); }
+.badge {
+  position: absolute; top: -4px; left: -4px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--red); color: #fff; font-size: 10px;
+  display: grid; place-items: center; font-weight: 600;
+}
+.btn-primary {
+  display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+  background: var(--violet); color: #fff; border-radius: 12px; font-weight: 600;
+  font-size: 13px; transition: .2s;
+}
+.btn-primary:hover { filter: brightness(1.1); }
+.search-box {
+  position: relative; display: flex; align-items: center;
+}
+.search-box input {
+  width: 180px; padding: 8px 32px 8px 12px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--input-bg); font-size: 13px; outline: none; transition: .2s;
+}
+.search-box input:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(124,92,252,.15); }
+.search-box svg { position: absolute; right: 10px; color: var(--text-mute); }
+.avatar {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  color: #fff; font-weight: 600; font-size: 14px; flex-shrink: 0;
+}
+.avatar-sm { width: 24px; height: 24px; font-size: 10px; }
+
+/* MAIN */
+.main { padding: 28px; max-width: 1300px; margin: 0 auto; }
+.page-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.page-sub { color: var(--text-soft); font-size: 14px; margin-bottom: 20px; }
+
+/* CARDS */
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  transition: background .3s, border-color .3s;
+}
+.card-head {
+  padding: 14px 20px; font-weight: 600; font-size: 14px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* STAT CARDS */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+  padding: 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border);
+  cursor: pointer; transition: .2s; text-align: right;
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px var(--shadow); }
+.stat-card.active { border-width: 2px; }
+.stat-top { display: flex; align-items: center; justify-content: space-between; }
+.stat-num { font-size: 26px; font-weight: 800; }
+.stat-label { font-size: 12px; color: var(--text-mute); margin-top: 4px; }
+
+/* CHARTS */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+@media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+.chart-card { padding: 20px; }
+.chart-title { font-weight: 600; margin-bottom: 4px; }
+.chart-sub { font-size: 12px; color: var(--text-mute); margin-bottom: 12px; }
+canvas { max-height: 200px; }
+
+/* DRILL */
+.drill-panel { border-color: var(--violet) !important; margin-bottom: 20px; }
+.drill-head {
+  padding: 12px 20px; background: var(--drill-bg); font-size: 13px; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+/* TASK ROW */
+.task-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+  border-top: 1px solid var(--border-soft); cursor: pointer; transition: .15s;
+}
+.task-row:first-child { border-top: none; }
+.task-row:hover { background: var(--surface-alt); }
+.task-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.task-info { flex: 1; min-width: 0; }
+.task-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-title.done { text-decoration: line-through; color: var(--text-mute); }
+.task-cat { font-size: 12px; color: var(--text-mute); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px;
+  border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.task-due { font-size: 12px; display: flex; align-items: center; gap: 4px; width: 60px; justify-content: flex-end; }
+.task-avatars { display: flex; gap: -6px; width: 60px; justify-content: flex-end; }
+.task-avatars .avatar-sm { margin-inline-start: -6px; border: 2px solid var(--surface); }
+
+/* KANBAN */
+.kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, 1fr); } }
+.kanban-col { border-radius: 16px; background: var(--surface); border: 1px solid var(--border); padding: 10px; min-height: 400px; }
+.kanban-col-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 8px; font-weight: 600; font-size: 13px; }
+.kanban-card {
+  border-radius: 12px; padding: 12px; background: var(--surface-alt); border: 1px solid var(--border);
+  border-right: 3px solid; margin-bottom: 8px; cursor: grab; transition: .2s;
+}
+.kanban-card:hover { box-shadow: 0 4px 12px var(--shadow); }
+.kanban-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
+.kanban-card-title { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+.kanban-card-foot { display: flex; justify-content: space-between; align-items: center; }
+
+/* CALENDAR */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-head { text-align: center; padding: 10px; font-size: 12px; font-weight: 600; color: var(--text-mute); }
+.cal-cell { min-height: 90px; padding: 6px; border-bottom: 1px solid var(--border-soft); border-left: 1px solid var(--border-soft); }
+.cal-day { font-size: 12px; font-weight: 600; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 4px; }
+.cal-day.today { background: var(--violet); color: #fff; }
+.cal-task {
+  font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
+  cursor: pointer;
+}
+
+/* BOTTOM GRID */
+.bottom-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .bottom-grid { grid-template-columns: 1fr; } }
+.activity-item { display: flex; gap: 10px; font-size: 13px; margin-bottom: 12px; }
+.activity-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--violet); margin-top: 8px; flex-shrink: 0; }
+.activity-time { font-size: 11px; color: var(--text-mute); }
+
+/* FILTER BAR */
+.filter-bar { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-alt); border: 1px solid var(--border); }
+.filter-btn { padding: 6px 14px; border-radius: 10px; font-size: 13px; font-weight: 500; transition: .2s; color: var(--text-soft); }
+.filter-btn.active { background: var(--violet); color: #fff; }
+
+/* CAT SECTION */
+.cat-section { margin-bottom: 12px; }
+.cat-head {
+  display: flex; align-items: center; gap: 10px; padding: 14px 20px; cursor: pointer;
+  font-weight: 600;
+}
+.cat-dot { width: 12px; height: 12px; border-radius: 4px; }
+.cat-count { font-size: 12px; color: var(--text-mute); margin-right: auto; }
+.subtask-list { padding: 0 56px 10px 20px; }
+.subtask { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); margin-bottom: 4px; cursor: pointer; }
+.subtask-box {
+  width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center;
+  border: 1px solid var(--border); flex-shrink: 0;
+}
+.subtask-box.checked { background: rgba(16,185,129,.15); border-color: var(--green); }
+
+/* MODAL/DRAWER */
+.modal-overlay { position: fixed; inset: 0; background: var(--overlay); z-index: 40; display: none; }
+.modal-overlay.open { display: flex; }
+.drawer {
+  width: 440px; max-width: 100%; height: 100%; background: var(--surface);
+  overflow-y: auto; box-shadow: -10px 0 40px rgba(0,0,0,.3);
+  margin-right: auto;
+}
+.drawer-head {
+  padding: 16px 24px; border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.drawer-head input {
+  font-size: 18px; font-weight: 700; flex: 1; background: transparent; border: none; outline: none;
+}
+.drawer-body { padding: 24px; }
+.field { margin-bottom: 20px; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--text-mute); margin-bottom: 6px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.input {
+  width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--input-bg); font-size: 13px; outline: none; transition: .2s;
+}
+.input:focus { border-color: var(--violet); }
+select.input { appearance: auto; }
+textarea.input { resize: none; min-height: 70px; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px 3px 4px; border-radius: 20px; background: var(--surface-alt); font-size: 13px; }
+.tag-add { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 20px; border: 1px dashed var(--text-mute); font-size: 13px; color: var(--text-soft); cursor: pointer; }
+.tag-dropdown { position: absolute; z-index: 10; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.25); min-width: 200px; }
+.tag-option { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; width: 100%; text-align: right; }
+.tag-option:hover { background: var(--surface-alt); }
+.progress-bar { height: 6px; border-radius: 6px; background: var(--surface-alt); overflow: hidden; flex: 1; }
+.progress-fill { height: 100%; border-radius: 6px; background: var(--violet); }
+.btn-outline { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; color: var(--text-soft); }
+
+/* ADD MODAL */
+.add-modal { position: fixed; inset: 0; background: var(--overlay); z-index: 50; display: none; place-items: center; padding: 16px; }
+.add-modal.open { display: grid; }
+.add-card { background: var(--surface); border-radius: 20px; width: 100%; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+.add-head { padding: 16px 24px; border-bottom: 1px solid var(--border-soft); display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 18px; }
+.add-body { padding: 24px; }
+.add-foot { padding: 16px 24px; border-top: 1px solid var(--border-soft); display: flex; justify-content: flex-end; gap: 8px; }
+.btn-cancel { padding: 8px 16px; border-radius: 10px; font-size: 13px; color: var(--text-soft); }
+.btn-submit { padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; background: var(--violet); color: #fff; }
+
+/* TOAST */
+.toast {
+  position: fixed; bottom: 24px; left: 24px; z-index: 60; padding: 12px 20px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 40px var(--shadow); font-size: 14px; font-weight: 500;
+  transform: translateY(100px); opacity: 0; transition: .3s;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* LOADING */
+.loading { display: flex; align-items: center; justify-content: center; padding: 60px; }
+.spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--violet); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* EMPTY */
+.empty { text-align: center; padding: 48px 20px; color: var(--text-mute); font-size: 14px; }
+
+/* HIDE */
+.hidden { display: none !important; }
+</style>
+</head>
+<body data-theme="light">
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">מ</div>
+    <h1>מערכת המשימות</h1>
+    <p>מרכז השליטה האישי שלך לניהול משימות, פרויקטים ומעקב.<br>כניסה למורשים בלבד.</p>
+    <button class="btn-google" onclick="googleLogin()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+      כניסה עם Google
+    </button>
+    <div id="loginError" class="login-error hidden"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="hidden">
+  <!-- BANNER -->
+  <header class="banner">
+    <div class="brand">
+      <div class="brand-icon">מ</div>
+      <div>
+        <div class="brand-name">מערכת המשימות</div>
+        <div class="brand-sub">מרכז השליטה שלך</div>
+      </div>
+    </div>
+    <nav class="nav-tabs" id="navTabs"></nav>
+    <div class="spacer"></div>
+    <div class="search-box">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="חיפוש…" id="searchInput" oninput="handleSearch(this.value)">
+    </div>
+    <button class="icon-btn" onclick="toggleTheme()" title="מצב בהיר/כהה" id="themeBtn">🌙</button>
+    <button class="icon-btn" id="bellBtn">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="badge" id="bellBadge">0</span>
+    </button>
+    <button class="btn-primary" onclick="openAddModal()">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      משימה
+    </button>
+    <div class="avatar" id="userAvatar" style="background:var(--violet)" title=""></div>
+  </header>
+
+  <!-- CONTENT -->
+  <main class="main" id="content">
+    <div class="loading"><div class="spinner"></div></div>
+  </main>
+</div>
+
+<!-- TASK DETAIL DRAWER -->
+<div class="modal-overlay" id="drawerOverlay" onclick="closeDrawer()">
+  <div class="drawer" onclick="event.stopPropagation()" id="drawer"></div>
+</div>
+
+<!-- ADD TASK MODAL -->
+<div class="add-modal" id="addModal" onclick="closeAddModal()">
+  <div class="add-card" onclick="event.stopPropagation()">
+    <div class="add-head">משימה חדשה <button onclick="closeAddModal()" style="color:var(--text-mute);font-size:20px">✕</button></div>
+    <div class="add-body">
+      <div class="field"><input class="input" id="addTitle" placeholder="כותרת המשימה…"></div>
+      <div class="field-row" style="margin-bottom:12px">
+        <select class="input" id="addCat"></select>
+        <select class="input" id="addPrio">
+          <option value="high">עדיפות גבוה</option>
+          <option value="medium" selected>עדיפות בינוני</option>
+          <option value="low">עדיפות נמוך</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <input class="input" type="date" id="addDue">
+        <input class="input" type="number" id="addEst" placeholder="שעות הערכה" value="2" min="0">
+      </div>
+    </div>
+    <div class="add-foot">
+      <button class="btn-cancel" onclick="closeAddModal()">ביטול</button>
+      <button class="btn-submit" onclick="addTask()">הוספה</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   FIREBASE INIT
+   ============================================================ */
+firebase.initializeApp({
+  apiKey: "AIzaSyDHv6PN_rbFvw9yIfx0QDh48cwfEJ4bj4Y",
+  authDomain: "task-command-e573f.firebaseapp.com",
+  projectId: "task-command-e573f",
+  storageBucket: "task-command-e573f.firebasestorage.app",
+  messagingSenderId: "635200666095",
+  appId: "1:635200666095:web:f36c5bcc946a5d28a49e1a"
+});
+const auth = firebase.auth();
+const db = firebase.firestore();
+let currentUser = null;
+let ADMIN_UID = null;
+
+/* ============================================================
+   DATA
+   ============================================================ */
+const STATUS_MAP = {
+  todo:       { label: "לביצוע",     color: "#94A3B8", icon: "○" },
+  inprogress: { label: "בתהליך",     color: "#F59E0B", icon: "◔" },
+  waiting:    { label: "ממתין לאחר", color: "#3B82F6", icon: "⏸" },
+  done:       { label: "הושלם",      color: "#10B981", icon: "✓" },
+};
+const PRIO_MAP = {
+  high:   { label: "גבוה",  color: "#F43F5E" },
+  medium: { label: "בינוני", color: "#F59E0B" },
+  low:    { label: "נמוך",  color: "#10B981" },
+};
+const DEFAULT_CATS = [
+  { id: "c1", name: "אסטרטגיה דיגיטלית", color: "#7C5CFC" },
+  { id: "c2", name: "פרויקטי אגף",        color: "#3B82F6" },
+  { id: "c3", name: "תפעול ושוטף",        color: "#F59E0B" },
+  { id: "c4", name: "ישיבות ומעקב",       color: "#10B981" },
+];
+
+let tasks = [];
+let categories = [];
+let people = [];
+let activityLog = [];
+let currentView = "dash";
+let drillFilter = null;
+let statusFilter = "all";
+let searchQuery = "";
+let charts = {};
+
+/* ============================================================
+   AUTH
+   ============================================================ */
+function googleLogin() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    document.getElementById("loginError").textContent = "שגיאה: " + err.message;
+    document.getElementById("loginError").classList.remove("hidden");
+  });
+}
+
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById("loginScreen").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+
+    const avatar = document.getElementById("userAvatar");
+    if (user.photoURL) {
+      avatar.innerHTML = `<img src="${user.photoURL}" style="width:100%;height:100%;border-radius:50%">`;
+    } else {
+      avatar.textContent = user.displayName?.charAt(0) || "?";
+    }
+    avatar.title = user.displayName || user.email;
+
+    await initData();
+    renderNav();
+    renderView();
+  } else {
+    currentUser = null;
+    document.getElementById("loginScreen").classList.remove("hidden");
+    document.getElementById("app").classList.add("hidden");
+  }
+});
+
+/* ============================================================
+   FIRESTORE DATA
+   ============================================================ */
+function userDoc(collection) {
+  return db.collection("users").doc(currentUser.uid).collection(collection);
+}
+
+async function initData() {
+  // Load categories
+  const catSnap = await userDoc("categories").get();
+  if (catSnap.empty) {
+    // First time: seed defaults
+    for (const c of DEFAULT_CATS) {
+      await userDoc("categories").doc(c.id).set({ name: c.name, color: c.color, order: DEFAULT_CATS.indexOf(c) });
+    }
+    categories = [...DEFAULT_CATS];
+  } else {
+    categories = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+
+  // Load people
+  const pplSnap = await userDoc("people").get();
+  if (pplSnap.empty) {
+    const me = { name: currentUser.displayName || "אני", email: currentUser.email, initials: (currentUser.displayName || "א").charAt(0), color: "#7C5CFC", isMe: true };
+    await userDoc("people").doc("me").set(me);
+    people = [{ id: "me", ...me }];
+  } else {
+    people = pplSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+
+  // Populate add modal category select
+  const sel = document.getElementById("addCat");
+  sel.innerHTML = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+
+  // Set default date
+  document.getElementById("addDue").value = todayISO();
+
+  // Listen to tasks in real-time
+  userDoc("tasks").orderBy("createdAt", "desc").onSnapshot(snap => {
+    tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderView();
+  });
+
+  // Load activity
+  userDoc("activity").orderBy("time", "desc").limit(20).onSnapshot(snap => {
+    activityLog = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (currentView === "dash") renderView();
+  });
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function getCat(id) { return categories.find(c => c.id === id) || { name: "?", color: "#999" }; }
+function getPerson(id) { return people.find(p => p.id === id) || { name: "?", initials: "?", color: "#999" }; }
+function softColor(hex, dark) { return hex + (dark ? "30" : "1F"); }
+function isDark() { return document.body.dataset.theme === "dark"; }
+
+function toggleTheme() {
+  const d = document.body.dataset.theme === "dark";
+  document.body.dataset.theme = d ? "light" : "dark";
+  document.getElementById("themeBtn").textContent = d ? "🌙" : "☀️";
+  if (charts.donut) { charts.donut.destroy(); charts.bar.destroy(); }
+  if (currentView === "dash") renderView();
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+async function logActivity(action, target) {
+  await userDoc("activity").add({ who: currentUser.displayName || "אני", action, target, time: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const diff = Date.now() - d.getTime();
+  if (diff < 60000) return "עכשיו";
+  if (diff < 3600000) return `לפני ${Math.floor(diff/60000)} דק׳`;
+  if (diff < 86400000) return `לפני ${Math.floor(diff/3600000)} שעות`;
+  return d.toLocaleDateString("he-IL");
+}
+
+function handleSearch(q) { searchQuery = q.trim().toLowerCase(); renderView(); }
+
+function avatarHTML(person, small) {
+  const cls = small ? "avatar avatar-sm" : "avatar";
+  return `<div class="${cls}" style="background:${person.color}" title="${person.name}">${person.initials || person.name?.charAt(0) || "?"}</div>`;
+}
+
+function pillHTML(label, color) {
+  return `<span class="pill" style="color:${color};background:${softColor(color, isDark())}">⚑ ${label}</span>`;
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+const VIEWS = [
+  { id: "dash",  label: "דשבורד",   icon: "📊" },
+  { id: "today", label: "היום שלי", icon: "☀️" },
+  { id: "tasks", label: "משימות",   icon: "📋" },
+  { id: "board", label: "לוח",      icon: "▦" },
+  { id: "cal",   label: "לוח שנה",  icon: "📅" },
+];
+
+function renderNav() {
+  document.getElementById("navTabs").innerHTML = VIEWS.map(v =>
+    `<button class="nav-tab ${v.id === currentView ? 'active' : ''}" onclick="switchView('${v.id}')">${v.icon} ${v.label}</button>`
+  ).join("");
+}
+
+function switchView(v) {
+  currentView = v; drillFilter = null; statusFilter = "all"; searchQuery = "";
+  document.getElementById("searchInput").value = "";
+  renderNav(); renderView();
+}
+
+/* ============================================================
+   RENDER ROUTER
+   ============================================================ */
+function renderView() {
+  const el = document.getElementById("content");
+  switch (currentView) {
+    case "dash":  renderDashboard(el); break;
+    case "today": renderToday(el); break;
+    case "tasks": renderTasks(el); break;
+    case "board": renderBoard(el); break;
+    case "cal":   renderCalendar(el); break;
+  }
+  // Update bell badge
+  const overdue = tasks.filter(t => t.status !== "done" && t.due < todayISO()).length;
+  document.getElementById("bellBadge").textContent = overdue;
+  document.getElementById("bellBadge").style.display = overdue ? "grid" : "none";
+}
+
+function filteredTasks() {
+  let list = tasks;
+  if (searchQuery) {
+    list = list.filter(t => t.title.toLowerCase().includes(searchQuery) || getCat(t.cat).name.toLowerCase().includes(searchQuery));
+  }
+  return list;
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+function renderDashboard(el) {
+  const ft = filteredTasks();
+  const counts = { todo: 0, inprogress: 0, waiting: 0, done: 0 };
+  ft.forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
+  const overdue = ft.filter(t => t.status !== "done" && t.due < todayISO()).length;
+  const hot = ft.filter(t => t.status !== "done" && (t.due <= todayISO() || t.prio === "high")).sort((a, b) => (a.due || "").localeCompare(b.due || ""));
+
+  const h = new Date().getHours();
+  const greet = h < 12 ? "בוקר טוב" : h < 18 ? "צהריים טובים" : "ערב טוב";
+
+  let drillHTML = "";
+  if (drillFilter) {
+    let drilled = [];
+    let drillLabel = "";
+    if (drillFilter.type === "status") { drilled = ft.filter(t => t.status === drillFilter.value); drillLabel = STATUS_MAP[drillFilter.value]?.label; }
+    else if (drillFilter.type === "cat") { drilled = ft.filter(t => t.cat === drillFilter.value && t.status !== "done"); drillLabel = getCat(drillFilter.value).name; }
+    else if (drillFilter.type === "overdue") { drilled = ft.filter(t => t.status !== "done" && t.due < todayISO()); drillLabel = "באיחור"; }
+    drillHTML = `
+      <div class="card drill-panel">
+        <div class="drill-head">
+          <span>דריל-דאון · ${drilled.length} משימות · "${drillLabel}"</span>
+          <button onclick="drillFilter=null;renderView()" style="color:var(--text-mute);font-size:18px">✕</button>
+        </div>
+        ${drilled.map(t => taskRowHTML(t)).join("") || '<div class="empty">אין משימות תואמות.</div>'}
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div style="color:var(--text-mute);font-size:14px">${greet} 👋</div>
+    <h1 class="page-title">תמונת מצב</h1>
+    <p class="page-sub">יש לך <b style="color:var(--red)">${hot.length} משימות בוערות</b> ו־<b style="color:var(--blue)">${counts.waiting} ממתינות לאחרים</b>. לחיצה על גרף מציגה את המשימות עצמן.</p>
+
+    <div class="stats-grid">
+      ${Object.keys(STATUS_MAP).map(k => `
+        <div class="stat-card ${drillFilter?.type==='status'&&drillFilter?.value===k?'active':''}" style="${drillFilter?.type==='status'&&drillFilter?.value===k?`border-color:${STATUS_MAP[k].color}`:''}" onclick="toggleDrill('status','${k}')">
+          <div class="stat-top">
+            <span style="color:${STATUS_MAP[k].color};font-size:18px">${STATUS_MAP[k].icon}</span>
+            <span class="stat-num">${counts[k]}</span>
+          </div>
+          <div class="stat-label">${STATUS_MAP[k].label}</div>
+        </div>
+      `).join("")}
+      <div class="stat-card ${drillFilter?.type==='overdue'?'active':''}" style="background:${softColor('#F43F5E',isDark())};${drillFilter?.type==='overdue'?'border-color:var(--red)':''}" onclick="toggleDrill('overdue')">
+        <div class="stat-top">
+          <span style="color:var(--red);font-size:18px">⚑</span>
+          <span class="stat-num" style="color:var(--red)">${overdue}</span>
+        </div>
+        <div class="stat-label" style="color:var(--red)">באיחור</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card chart-card">
+        <div class="chart-title">פילוח לפי סטטוס</div>
+        <div class="chart-sub">לחיצה על פלח → דריל-דאון</div>
+        <canvas id="donutChart"></canvas>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-title">עומס פעיל לפי קטגוריה</div>
+        <div class="chart-sub">לחיצה על עמודה → דריל-דאון</div>
+        <canvas id="barChart"></canvas>
+      </div>
+    </div>
+
+    ${drillHTML}
+
+    <div class="bottom-grid">
+      <div class="card">
+        <div class="card-head">🔥 בוערות עכשיו</div>
+        ${hot.map(t => taskRowHTML(t)).join("") || '<div class="empty">אין משימות בוערות!</div>'}
+      </div>
+      <div class="card">
+        <div class="card-head"><span style="color:var(--violet)">●</span> פעילות אחרונה</div>
+        <div style="padding:16px">
+          ${activityLog.slice(0, 8).map(a => `
+            <div class="activity-item">
+              <div class="activity-dot"></div>
+              <div><b>${a.who}</b> ${a.action} · ${a.target}<div class="activity-time">${formatTime(a.time)}</div></div>
+            </div>
+          `).join("") || '<div class="empty">אין פעילות עדיין.</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+  renderCharts(counts);
+}
+
+function toggleDrill(type, value) {
+  if (drillFilter?.type === type && drillFilter?.value === value) drillFilter = null;
+  else drillFilter = { type, value };
+  renderView();
+}
+
+function renderCharts(counts) {
+  const donutCtx = document.getElementById("donutChart")?.getContext("2d");
+  const barCtx = document.getElementById("barChart")?.getContext("2d");
+  if (!donutCtx || !barCtx) return;
+
+  const textColor = isDark() ? "#B5B0C4" : "#475569";
+
+  charts.donut = new Chart(donutCtx, {
+    type: "doughnut",
+    data: {
+      labels: Object.values(STATUS_MAP).map(s => s.label),
+      datasets: [{ data: [counts.todo, counts.inprogress, counts.waiting, counts.done],
+        backgroundColor: Object.values(STATUS_MAP).map(s => s.color), borderWidth: 2,
+        borderColor: isDark() ? "#1E1A28" : "#FFFFFF" }]
+    },
+    options: {
+      cutout: "60%", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "left", rtl: true, labels: { color: textColor, font: { family: "Heebo" }, padding: 12 } } },
+      onClick: (e, els) => { if (els.length) { const k = Object.keys(STATUS_MAP)[els[0].index]; toggleDrill("status", k); } }
+    }
+  });
+
+  const catData = categories.map(c => ({ name: c.name, color: c.color, id: c.id, count: tasks.filter(t => t.cat === c.id && t.status !== "done").length }));
+  charts.bar = new Chart(barCtx, {
+    type: "bar",
+    data: {
+      labels: catData.map(c => c.name),
+      datasets: [{ data: catData.map(c => c.count), backgroundColor: catData.map(c => c.color), borderRadius: 6, barThickness: 28 }]
+    },
+    options: {
+      indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { display: false }, y: { ticks: { color: textColor, font: { family: "Heebo", size: 11 } }, grid: { display: false } } },
+      onClick: (e, els) => { if (els.length) { toggleDrill("cat", catData[els[0].index].id); } }
+    }
+  });
+}
+
+/* ============================================================
+   TASK ROW HTML (shared)
+   ============================================================ */
+function taskRowHTML(t) {
+  const S = STATUS_MAP[t.status] || STATUS_MAP.todo;
+  const P = PRIO_MAP[t.prio] || PRIO_MAP.medium;
+  const cat = getCat(t.cat);
+  const od = t.status !== "done" && t.due < todayISO();
+  const avatars = (t.tags || []).map(pid => avatarHTML(getPerson(pid), true)).join("");
+  return `
+    <div class="task-row" onclick="openDrawer('${t.id}')">
+      <div class="task-dot" style="background:${S.color}"></div>
+      <div class="task-info">
+        <div class="task-title ${t.status==='done'?'done':''}">${t.title}</div>
+        <div class="task-cat">📁 ${cat.name}</div>
+      </div>
+      ${pillHTML(P.label, P.color)}
+      <div class="task-due" style="color:${od?'var(--red)':'var(--text-soft)'}">🕐 ${(t.due||"").slice(5)}</div>
+      <div class="task-avatars">${avatars}</div>
+    </div>`;
+}
+
+/* ============================================================
+   TODAY VIEW
+   ============================================================ */
+function renderToday(el) {
+  const list = filteredTasks().filter(t => t.status !== "done" && t.due <= todayISO())
+    .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.prio] - { high: 0, medium: 1, low: 2 }[b.prio]));
+  el.innerHTML = `
+    <h1 class="page-title">היום שלי</h1>
+    <p class="page-sub">מה שדורש תשומת לב עכשיו · ${list.length} משימות</p>
+    <div class="card">
+      ${list.map(t => taskRowHTML(t)).join("") || '<div class="empty">הכול נקי להיום 🎉</div>'}
+    </div>`;
+}
+
+/* ============================================================
+   TASKS VIEW
+   ============================================================ */
+function renderTasks(el) {
+  const ft = filteredTasks();
+  const filterBtns = [["all", "הכול"], ...Object.entries(STATUS_MAP).map(([k, v]) => [k, v.label])];
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <h1 class="page-title" style="margin:0">כל המשימות</h1>
+      <div class="filter-bar">${filterBtns.map(([k, l]) =>
+        `<button class="filter-btn ${statusFilter===k?'active':''}" onclick="statusFilter='${k}';renderView()">${l}</button>`
+      ).join("")}</div>
+    </div>
+    ${categories.map(c => {
+      const items = ft.filter(t => t.cat === c.id && (statusFilter === "all" || t.status === statusFilter));
+      if (!items.length) return "";
+      return `
+        <div class="card cat-section">
+          <div class="cat-head" onclick="this.nextElementSibling.classList.toggle('hidden')">
+            <span style="font-size:14px;color:var(--text-mute)">▼</span>
+            <div class="cat-dot" style="background:${c.color}"></div>
+            <span>${c.name}</span>
+            <span class="cat-count">${items.length} משימות</span>
+          </div>
+          <div>
+            ${items.map(t => {
+              const subsHTML = (t.subtasks || []).map(s =>
+                `<div class="subtask" onclick="event.stopPropagation();toggleSub('${t.id}','${s.id}')">
+                  <div class="subtask-box ${s.done?'checked':''}">${s.done?"✓":""}</div>
+                  <span style="${s.done?'text-decoration:line-through;color:var(--text-mute)':''}">${s.text}</span>
+                </div>`
+              ).join("");
+              return taskRowHTML(t) + (subsHTML ? `<div class="subtask-list">${subsHTML}</div>` : "");
+            }).join("")}
+          </div>
+        </div>`;
+    }).join("")}
+    ${ft.length === 0 ? '<div class="card"><div class="empty">אין משימות עדיין. לחץ "משימה" למעלה כדי להתחיל!</div></div>' : ""}
+  `;
+}
+
+/* ============================================================
+   BOARD (KANBAN)
+   ============================================================ */
+function renderBoard(el) {
+  const ft = filteredTasks();
+  el.innerHTML = `
+    <h1 class="page-title">לוח קנבן</h1>
+    <p class="page-sub">גרור משימות בין העמודות כדי לעדכן סטטוס</p>
+    <div class="kanban">
+      ${Object.entries(STATUS_MAP).map(([k, s]) => {
+        const items = ft.filter(t => t.status === k);
+        return `
+          <div class="kanban-col" ondragover="event.preventDefault();this.style.outline='2px solid var(--violet)'" ondragleave="this.style.outline=''" ondrop="dropTask(event,'${k}');this.style.outline=''">
+            <div class="kanban-col-head">
+              <div class="task-dot" style="background:${s.color}"></div>
+              ${s.label}
+              <span style="color:var(--text-mute);font-size:12px;margin-right:auto">${items.length}</span>
+            </div>
+            ${items.map(t => {
+              const P = PRIO_MAP[t.prio];
+              const avatars = (t.tags||[]).map(pid => avatarHTML(getPerson(pid), true)).join("");
+              return `
+                <div class="kanban-card" draggable="true" ondragstart="event.dataTransfer.setData('text','${t.id}')" onclick="openDrawer('${t.id}')" style="border-right-color:${P.color}">
+                  <div class="kanban-card-title">${t.title}</div>
+                  <div class="kanban-card-foot">${pillHTML(P.label, P.color)}<div style="display:flex">${avatars}</div></div>
+                </div>`;
+            }).join("")}
+          </div>`;
+      }).join("")}
+    </div>`;
+}
+
+async function dropTask(e, newStatus) {
+  e.preventDefault();
+  const id = e.dataTransfer.getData("text");
+  if (!id) return;
+  await userDoc("tasks").doc(id).update({ status: newStatus, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  const t = tasks.find(x => x.id === id);
+  await logActivity("עדכן סטטוס ל" + STATUS_MAP[newStatus].label, t?.title || "");
+  showToast(`עודכן ל"${STATUS_MAP[newStatus].label}"`);
+}
+
+/* ============================================================
+   CALENDAR
+   ============================================================ */
+function renderCalendar(el) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const first = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const monthName = now.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
+  const todayDate = now.getDate();
+
+  let cells = "";
+  for (let i = 0; i < first; i++) cells += '<div class="cal-cell"></div>';
+  for (let d = 1; d <= days; d++) {
+    const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const dayTasks = tasks.filter(t => t.due === ds);
+    const isToday = d === todayDate;
+    cells += `<div class="cal-cell">
+      <div class="cal-day ${isToday?'today':''}">${d}</div>
+      ${dayTasks.slice(0, 3).map(t => `<div class="cal-task" style="background:${softColor(STATUS_MAP[t.status]?.color||'#999',isDark())};color:${STATUS_MAP[t.status]?.color||'#999'}" onclick="openDrawer('${t.id}')">${t.title}</div>`).join("")}
+    </div>`;
+  }
+
+  el.innerHTML = `
+    <h1 class="page-title">לוח שנה · ${monthName}</h1>
+    <p class="page-sub">משימות לפי תאריך יעד · הפגישות נשארות ביומן Google שלך</p>
+    <div class="card" style="overflow:hidden">
+      <div class="cal-grid">
+        ${["א","ב","ג","ד","ה","ו","ש"].map(d=>`<div class="cal-head">${d}</div>`).join("")}
+        ${cells}
+      </div>
+    </div>`;
+}
+
+/* ============================================================
+   ADD TASK
+   ============================================================ */
+function openAddModal() {
+  document.getElementById("addModal").classList.add("open");
+  document.getElementById("addTitle").value = "";
+  document.getElementById("addDue").value = todayISO();
+  document.getElementById("addEst").value = "2";
+  setTimeout(() => document.getElementById("addTitle").focus(), 100);
+}
+function closeAddModal() { document.getElementById("addModal").classList.remove("open"); }
+
+async function addTask() {
+  const title = document.getElementById("addTitle").value.trim();
+  if (!title) return;
+  const task = {
+    title,
+    cat: document.getElementById("addCat").value,
+    status: "todo",
+    prio: document.getElementById("addPrio").value,
+    due: document.getElementById("addDue").value,
+    est: parseFloat(document.getElementById("addEst").value) || 2,
+    spent: 0,
+    tags: [],
+    project: "",
+    notes: "",
+    subtasks: [],
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  await userDoc("tasks").add(task);
+  await logActivity("יצר משימה", title);
+  closeAddModal();
+  showToast("✓ משימה נוספה");
+}
+
+/* ============================================================
+   DRAWER (TASK DETAIL)
+   ============================================================ */
+function openDrawer(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  const cat = getCat(t.cat);
+  const P = PRIO_MAP[t.prio];
+  const progress = (t.subtasks||[]).length ? Math.round((t.subtasks.filter(s=>s.done).length / t.subtasks.length) * 100) : null;
+
+  document.getElementById("drawer").innerHTML = `
+    <div class="drawer-head">
+      <input value="${t.title}" onblur="updateField('${id}','title',this.value)">
+      <button onclick="closeDrawer()" style="color:var(--text-mute);font-size:20px;margin-top:2px">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="field">
+        <div class="field-label">קטגוריה</div>
+        <select class="input" onchange="updateField('${id}','cat',this.value)">
+          ${categories.map(c => `<option value="${c.id}" ${c.id===t.cat?'selected':''}>${c.name}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field-row field">
+        <div>
+          <div class="field-label">סטטוס</div>
+          <select class="input" onchange="updateField('${id}','status',this.value)">
+            ${Object.entries(STATUS_MAP).map(([k,v])=>`<option value="${k}" ${k===t.status?'selected':''}>${v.label}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <div class="field-label">עדיפות</div>
+          <select class="input" onchange="updateField('${id}','prio',this.value)">
+            ${Object.entries(PRIO_MAP).map(([k,v])=>`<option value="${k}" ${k===t.prio?'selected':''}>${v.label}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="field-row field">
+        <div>
+          <div class="field-label">תאריך יעד</div>
+          <input type="date" class="input" value="${t.due||''}" onchange="updateField('${id}','due',this.value)">
+        </div>
+        <div>
+          <div class="field-label">זמן (שעות)</div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:8px;font-size:13px">
+            🕐 ${t.spent||0} / ${t.est||0}
+            <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,(t.spent||0)/(t.est||1)*100)}%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-label">תתי-משימות ${progress !== null ? `· ${progress}%` : ""}</div>
+        ${(t.subtasks||[]).map(s => `
+          <div class="subtask" onclick="toggleSub('${id}','${s.id}')">
+            <div class="subtask-box ${s.done?'checked':''}">${s.done?'✓':''}</div>
+            <span style="${s.done?'text-decoration:line-through;color:var(--text-mute)':''}">${s.text}</span>
+          </div>
+        `).join("")}
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input class="input" id="newSubInput" placeholder="תת-משימה חדשה…" style="flex:1" onkeydown="if(event.key==='Enter')addSub('${id}')">
+          <button class="btn-primary" onclick="addSub('${id}')" style="padding:6px 12px;font-size:12px">+ הוסף</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-label">אנשים מתויגים</div>
+        <div class="tag-list">
+          ${(t.tags||[]).map(pid => { const p = getPerson(pid); return `<span class="tag-chip">${avatarHTML(p,true)} ${p.name}</span>`; }).join("")}
+          <div style="position:relative">
+            <button class="tag-add" onclick="this.nextElementSibling.classList.toggle('hidden')">🏷 תייג</button>
+            <div class="tag-dropdown hidden">
+              ${people.filter(p => !(t.tags||[]).includes(p.id)).map(p =>
+                `<button class="tag-option" onclick="tagPerson('${id}','${p.id}');this.closest('.tag-dropdown').classList.add('hidden')">
+                  ${avatarHTML(p,true)} ${p.name} ${p.isMe ? '<span style="color:var(--text-mute);font-size:11px">(ללא התראה)</span>' : ''}
+                </button>`
+              ).join("")}
+              ${people.filter(p => !(t.tags||[]).includes(p.id)).length === 0 ? '<div style="padding:8px;font-size:12px;color:var(--text-mute)">כולם מתויגים</div>' : ''}
+            </div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-mute);margin-top:6px">תיוג אדם אחר → נשלחת לו התראה במייל אוטומטית.</div>
+      </div>
+
+      <div class="field">
+        <div class="field-label">פרויקט</div>
+        <input class="input" value="${t.project||''}" placeholder="שם הפרויקט…" onblur="updateField('${id}','project',this.value)">
+      </div>
+
+      <div class="field">
+        <div class="field-label">הערות</div>
+        <textarea class="input" placeholder="הוסף הערה…" onblur="updateField('${id}','notes',this.value)">${t.notes||''}</textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;padding-top:8px">
+        <button class="btn-outline" onclick="showToast('צרוף קבצים יתווסף בגרסה הבאה')">📎 צרף קובץ</button>
+        <button class="btn-outline" style="color:var(--red);border-color:var(--red)" onclick="deleteTask('${id}')">🗑 מחק משימה</button>
+      </div>
+    </div>
+  `;
+  document.getElementById("drawerOverlay").classList.add("open");
+}
+
+function closeDrawer() { document.getElementById("drawerOverlay").classList.remove("open"); }
+
+async function updateField(id, field, value) {
+  await userDoc("tasks").doc(id).update({ [field]: value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  const t = tasks.find(x => x.id === id);
+  if (field === "status") await logActivity("עדכן סטטוס ל" + STATUS_MAP[value]?.label, t?.title || "");
+}
+
+async function deleteTask(id) {
+  if (!confirm("למחוק את המשימה?")) return;
+  const t = tasks.find(x => x.id === id);
+  await userDoc("tasks").doc(id).delete();
+  await logActivity("מחק", t?.title || "");
+  closeDrawer();
+  showToast("🗑 משימה נמחקה");
+}
+
+async function toggleSub(taskId, subId) {
+  const t = tasks.find(x => x.id === taskId);
+  if (!t) return;
+  const subs = (t.subtasks || []).map(s => s.id === subId ? { ...s, done: !s.done } : s);
+  await userDoc("tasks").doc(taskId).update({ subtasks: subs });
+}
+
+async function addSub(taskId) {
+  const inp = document.getElementById("newSubInput");
+  const text = inp.value.trim();
+  if (!text) return;
+  const t = tasks.find(x => x.id === taskId);
+  const subs = [...(t.subtasks || []), { id: "s" + Date.now(), text, done: false }];
+  await userDoc("tasks").doc(taskId).update({ subtasks: subs });
+  inp.value = "";
+  setTimeout(() => openDrawer(taskId), 300);
+}
+
+async function tagPerson(taskId, personId) {
+  const t = tasks.find(x => x.id === taskId);
+  if (!t || (t.tags || []).includes(personId)) return;
+  const tags = [...(t.tags || []), personId];
+  await userDoc("tasks").doc(taskId).update({ tags });
+  const person = getPerson(personId);
+  if (!person.isMe) {
+    showToast(`📧 התראה נשלחה ל${person.name} — תויג/ה במשימה`);
+    await logActivity(`תייג את ${person.name}`, t.title);
+  }
+  setTimeout(() => openDrawer(taskId), 300);
+}
+
+/* ============================================================
+   ADD PEOPLE (quick from drawer)
+   ============================================================ */
+
+/* ============================================================
+   INIT THEME FROM PREFERENCE
+   ============================================================ */
+if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  document.body.dataset.theme = "dark";
+  document.getElementById("themeBtn").textContent = "☀️";
+}
+</script>
+</body>
+</html>
