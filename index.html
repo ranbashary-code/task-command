@@ -55,6 +55,7 @@ a { color: var(--violet); text-decoration: none; }
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   background: linear-gradient(160deg, #2B1B52 0%, #361F63 52%, #4A2A7A 100%);
 }
+[data-theme="dark"] .login-screen { background: transparent; }
 .login-card {
   background: #FFFFFF; border-radius: 24px; padding: 48px 40px; text-align: center;
   box-shadow: 0 20px 60px rgba(0,0,0,.3); max-width: 400px; width: 90%; color: #1A2C2A;
@@ -309,6 +310,58 @@ textarea.input { resize: none; min-height: 70px; }
 .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--violet); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* AURORA BACKGROUND */
+.aurora-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: opacity .5s; }
+[data-theme="light"] .aurora-bg { opacity: 0; }
+[data-theme="dark"] .aurora-bg { opacity: 1; }
+.aurora-bg .grad { position: absolute; inset: 0; background: linear-gradient(160deg, #2B1B52 0%, #361F63 52%, #4A2A7A 100%); }
+.aurora-bg .blob { position: absolute; border-radius: 50%; filter: blur(80px); mix-blend-mode: screen; }
+.aurora-bg .b1 { width: 50vw; height: 50vw; top: -14%; left: -8%; opacity: .5; background: radial-gradient(circle, #FF8E72 0%, transparent 60%); animation: adrift1 26s ease-in-out infinite; }
+.aurora-bg .b2 { width: 42vw; height: 42vw; bottom: -16%; left: 12%; opacity: .4; background: radial-gradient(circle, #62DDF0 0%, transparent 64%); animation: adrift2 30s ease-in-out infinite; }
+.aurora-bg .b3 { width: 44vw; height: 44vw; top: 4%; right: -14%; opacity: .45; background: radial-gradient(circle, #FFC15E 0%, transparent 62%); animation: adrift3 34s ease-in-out infinite; }
+.aurora-bg .b4 { width: 32vw; height: 32vw; bottom: -8%; right: 8%; opacity: .35; background: radial-gradient(circle, #FF86BC 0%, transparent 64%); animation: adrift1 30s ease-in-out infinite reverse; }
+@keyframes adrift1 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(8vw,6vh) } }
+@keyframes adrift2 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(-6vw,-7vh) } }
+@keyframes adrift3 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(-7vw,8vh) } }
+.aurora-bg .stars {
+  position: absolute; inset: 0; opacity: .35; animation: twinkle 7s ease-in-out infinite alternate;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, #fff, transparent),
+    radial-gradient(1px 1px at 32% 68%, #e6e0ff, transparent),
+    radial-gradient(1.2px 1.2px at 58% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 74% 52%, #ddd6ff, transparent),
+    radial-gradient(1.3px 1.3px at 88% 78%, #fff, transparent),
+    radial-gradient(1px 1px at 46% 88%, #e6e0ff, transparent),
+    radial-gradient(1.1px 1.1px at 20% 50%, #fff, transparent),
+    radial-gradient(1px 1px at 65% 35%, #ddd6ff, transparent),
+    radial-gradient(1.2px 1.2px at 40% 80%, #fff, transparent);
+}
+@keyframes twinkle { from { opacity: .2 } to { opacity: .5 } }
+
+/* GLASSMORPHISM for dark mode */
+[data-theme="dark"] .card,
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .kanban-col,
+[data-theme="dark"] .add-card,
+[data-theme="dark"] .drawer,
+[data-theme="dark"] .toast {
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+[data-theme="dark"] .banner {
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: rgba(43,27,82,0.75);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+[data-theme="dark"] .kanban-card {
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.05);
+}
+[data-theme="dark"] .nav-tabs { background: rgba(255,255,255,0.06); }
+[data-theme="dark"] .filter-bar { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+[data-theme="dark"] .icon-btn { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+[data-theme="dark"] body { background: transparent; }
+
 /* EMPTY */
 .empty { text-align: center; padding: 48px 20px; color: var(--text-mute); font-size: 14px; }
 
@@ -350,8 +403,18 @@ textarea.input { resize: none; min-height: 70px; }
 </head>
 <body data-theme="light">
 
+<!-- AURORA BACKGROUND (visible in dark mode) -->
+<div class="aurora-bg">
+  <div class="grad"></div>
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="blob b4"></div>
+  <div class="stars"></div>
+</div>
+
 <!-- LOGIN SCREEN -->
-<div id="loginScreen" class="login-screen">
+<div id="loginScreen" class="login-screen" style="position:relative;z-index:1">
   <div class="login-card">
     <div class="login-logo">מ</div>
     <h1>מערכת המשימות</h1>
@@ -365,7 +428,7 @@ textarea.input { resize: none; min-height: 70px; }
 </div>
 
 <!-- MAIN APP -->
-<div id="app" class="hidden">
+<div id="app" class="hidden" style="position:relative;z-index:1">
   <!-- BANNER -->
   <header class="banner">
     <div class="brand">
