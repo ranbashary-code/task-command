@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
@@ -968,7 +967,7 @@ function taskRowHTML(t) {
         <div class="task-cat">📁 ${cat.name}</div>
       </div>
       ${pillHTML(P.label, P.color)}
-      <div class="task-due" style="color:${od?'var(--red)':'var(--text-soft)'}">🕐 ${(t.due||"").slice(5)}</div>
+      <div class="task-due" style="color:${od?'var(--red)':'var(--text-soft)'}">🕐 ${fmtDateShort(t.due)}</div>
       <div class="task-avatars">${avatars}</div>
     </div>`;
 }
@@ -977,14 +976,53 @@ function taskRowHTML(t) {
    TODAY VIEW
    ============================================================ */
 function renderToday(el) {
-  const list = filteredTasks().filter(t => t.status !== "done" && t.due <= todayISO())
+  const todayStr = todayISO();
+  const overdue = tasks.filter(t => t.status !== "done" && t.due < todayStr)
+    .sort((a, b) => (a.due || "").localeCompare(b.due || ""));
+  const todayTasks = tasks.filter(t => t.status !== "done" && t.due === todayStr)
     .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.prio] - { high: 0, medium: 1, low: 2 }[b.prio]));
+  const todayEvents = calendarEvents.filter(ev => ev.start.startsWith(todayStr))
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  const dayName = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
   el.innerHTML = `
     <h1 class="page-title">היום שלי</h1>
-    <p class="page-sub">מה שדורש תשומת לב עכשיו · ${list.length} משימות</p>
-    <div class="card">
-      ${list.map(t => taskRowHTML(t)).join("") || '<div class="empty">הכול נקי להיום 🎉</div>'}
-    </div>`;
+    <p class="page-sub">${dayName} · ${todayTasks.length} משימות להיום${overdue.length ? ` · <b style="color:var(--red)">${overdue.length} באיחור</b>` : ''}</p>
+
+    <div style="display:grid;grid-template-columns:${todayEvents.length ? '1fr 1fr' : '1fr'};gap:16px">
+      ${todayEvents.length ? `
+      <!-- TODAY'S SCHEDULE -->
+      <div class="card">
+        <div class="card-head">📅 לוז היום מהיומן</div>
+        <div style="padding:12px">
+          ${todayEvents.map(ev => {
+            const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+            const endTime = ev.allDay ? "" : " — " + new Date(ev.end).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+            return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+              <div style="min-width:90px;font-size:13px;font-weight:600;color:var(--coral)">${time}${endTime}</div>
+              <div style="font-size:14px">${ev.title}</div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>` : ''}
+
+      <!-- TODAY'S TASKS -->
+      <div>
+        ${todayTasks.length ? `
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-head">✅ משימות להיום</div>
+          ${todayTasks.map(t => taskRowHTML(t)).join("")}
+        </div>` : '<div class="card" style="margin-bottom:16px"><div class="empty">אין משימות להיום 🎉</div></div>'}
+
+        ${overdue.length ? `
+        <div class="card" style="border-color:var(--red)">
+          <div class="card-head" style="color:var(--red)">⚠️ באיחור (${overdue.length})</div>
+          ${overdue.map(t => taskRowHTML(t)).join("")}
+        </div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 /* ============================================================
@@ -1101,6 +1139,13 @@ function renderBoard(el) {
         ${(statusFilter!=="all"||prioFilter!=="all"||catFilter!=="all"||personFilter!=="all") ? `<button onclick="statusFilter='all';prioFilter='all';catFilter='all';personFilter='all';renderView()" style="font-size:12px;color:var(--red);padding:4px 10px;border-radius:8px;border:1px solid var(--red)">✕ נקה סינון</button>` : ""}
       </div>
       <div class="card">
+        <div class="task-row" style="font-size:12px;font-weight:600;color:var(--text-mute);cursor:default;border:none;padding:8px 20px">
+          <div style="width:10px"></div>
+          <div class="task-info">משימה</div>
+          <div style="width:80px;text-align:center">תיעדוף</div>
+          <div style="width:60px;text-align:center">תאריך</div>
+          <div style="width:60px;text-align:center">אנשים</div>
+        </div>
         ${ft.length ? ft.map(t => taskRowHTML(t)).join("") : '<div class="empty">אין משימות תואמות לסינון</div>'}
       </div>
     </div>
