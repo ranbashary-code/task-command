@@ -574,7 +574,7 @@ let catFilter = "all";
 let searchQuery = "";
 let charts = {};
 let calendarEvents = [];
-let calViewMode = "month"; // day, 3day, workweek, week, month
+let calViewMode = (()=>{ try { return localStorage.getItem("tc-calview") || "week"; } catch(e) { return "week"; } })();
 let calBaseDate = new Date();
 
 /* ============================================================
@@ -732,6 +732,9 @@ async function fetchCalendarEvents() {
     if (currentView === "cal" || currentView === "today") renderView();
   } catch (e) { console.warn("Calendar fetch error:", e); }
 }
+
+// Auto-refresh calendar every 2 minutes
+setInterval(() => { if (googleAccessToken) fetchCalendarEvents(); }, 120000);
 
 /* ============================================================
    HELPERS
@@ -1217,14 +1220,15 @@ function renderCalendar(el) {
         <button class="icon-btn" onclick="calNav(-1)" style="width:32px;height:32px;font-size:16px">→</button>
         <button onclick="calBaseDate=new Date();renderView()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--text-soft)">היום</button>
         <button class="icon-btn" onclick="calNav(1)" style="width:32px;height:32px;font-size:16px">←</button>
+        <button class="icon-btn" onclick="fetchCalendarEvents();showToast('🔄 מרענן יומן…')" title="רענן יומן" style="width:32px;height:32px;font-size:15px">🔄</button>
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
-      ${modes.map(m => `<button class="filter-btn ${calViewMode===m.id?'active':''}" onclick="calViewMode='${m.id}';renderView()" style="padding:5px 12px;border-radius:8px;${calViewMode===m.id?'background:var(--violet);color:#fff':'border:1px solid var(--border)'}">${m.label}</button>`).join("")}
+      ${modes.map(m => `<button class="filter-btn ${calViewMode===m.id?'active':''}" onclick="calViewMode='${m.id}';try{localStorage.setItem('tc-calview','${m.id}')}catch(e){};renderView()" style="padding:5px 12px;border-radius:8px;${calViewMode===m.id?'background:var(--violet);color:#fff':'border:1px solid var(--border)'}">${m.label}</button>`).join("")}
     </div>
     <p class="page-sub" style="margin-bottom:12px">
       ${calConnected
-        ? '📅 פגישות מיומן "<b>עבודה</b>" · משימות לפי תאריך יעד'
+        ? '📅 פגישות מיומן "<b>עבודה</b>"'
         : '⚠️ יומן Google לא מחובר · <button onclick="reconnectCalendar()" style="color:var(--coral);font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;font-family:inherit">לחץ כאן לחיבור היומן</button>'}
     </p>
     ${calViewMode === "month" ? renderCalMonth() : renderCalColumns()}
@@ -1316,15 +1320,16 @@ function renderCalColumns() {
     let evsHTML = "";
     dayEvs.forEach(ev => {
       const top = ((ev.startMin / 60) - START_H) * ROW_H;
-      const height = Math.max(ROW_H * 0.6, ((ev.endMin - ev.startMin) / 60) * ROW_H);
+      const height = Math.max(ROW_H * 0.7, ((ev.endMin - ev.startMin) / 60) * ROW_H);
       const width = 100 / totalCols;
       const right = ev._col * width;
       const time = ev.sH.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
       const endT = ev.eH.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
-      evsHTML += `<div style="position:absolute;top:${top}px;right:${right}%;width:${width}%;height:${height}px;padding:2px 4px;z-index:2" title="${ev.title}">
-        <div style="background:linear-gradient(160deg,rgba(255,142,114,0.25),rgba(255,203,107,0.15));border-right:3px solid var(--coral);border-radius:6px;height:100%;padding:4px 8px;font-size:11px;overflow:hidden">
-          <div style="color:var(--coral);font-weight:700">${time} — ${endT}</div>
-          <div style="margin-top:2px">${ev.title}</div>
+      const compact = height < 50;
+      evsHTML += `<div style="position:absolute;top:${top}px;right:${right}%;width:${width}%;height:${height}px;padding:1px 2px;z-index:2;box-sizing:border-box" title="${ev.title} (${time}—${endT})">
+        <div style="background:linear-gradient(160deg,rgba(255,142,114,0.3),rgba(255,203,107,0.18));border-right:3px solid var(--coral);border-radius:6px;height:100%;padding:3px 6px;font-size:10px;overflow:hidden;box-sizing:border-box">
+          <div style="color:var(--coral);font-weight:700;font-size:10px">${time}—${endT}</div>
+          ${!compact ? `<div style="margin-top:2px;font-size:11px;line-height:1.2">${ev.title}</div>` : `<div style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ev.title}</div>`}
         </div>
       </div>`;
     });
@@ -1333,16 +1338,6 @@ function renderCalColumns() {
     let allDayHTML = allDayEvs.map(ev =>
       `<div style="background:linear-gradient(120deg,rgba(255,142,114,0.2),rgba(255,203,107,0.12));border-right:3px solid var(--coral);border-radius:4px;padding:3px 6px;margin:2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b style="color:var(--coral)">כל היום</b> ${ev.title}</div>`
     ).join("");
-
-    // Tasks at 8am
-    const dayTasks = tasks.filter(t => t.due === ds && t.status !== "done");
-    dayTasks.forEach(t => {
-      const sc = STATUS_MAP[t.status]?.color || "#999";
-      const top = (8 - START_H) * ROW_H;
-      evsHTML += `<div style="position:absolute;top:${top}px;right:0;width:100%;padding:2px 4px;z-index:1">
-        <div style="background:${softColor(sc,isDark())};border-right:3px solid ${sc};border-radius:5px;padding:3px 6px;font-size:11px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openDrawer('${t.id}')">✅ ${t.title}</div>
-      </div>`;
-    });
 
     return `<div style="flex:1;border-left:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}">
       <div style="text-align:center;padding:8px;font-weight:600;border-bottom:2px solid var(--border)">
@@ -1375,14 +1370,15 @@ function renderCalMonth() {
   for (let i = 0; i < first; i++) cells += '<div class="cal-cell"></div>';
   for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    const dayTasks = tasks.filter(t => t.due === ds);
-    const dayEvents = calendarEvents.filter(ev => ev.start.startsWith(ds));
+    const dayEvents = calendarEvents.filter(ev => ev.start.startsWith(ds))
+      .sort((a,b) => a.start.localeCompare(b.start));
     const isToday = ds === todayStr;
-    const evHTML = dayEvents.slice(0, 2).map(ev => `<div class="cal-task cal-event" title="${ev.title}">📅 ${ev.title}</div>`).join("");
-    const taskHTML = dayTasks.slice(0, 3 - dayEvents.length).map(t =>
-      `<div class="cal-task" style="background:${softColor(STATUS_MAP[t.status]?.color||'#999',isDark())};color:${STATUS_MAP[t.status]?.color||'#999'}" onclick="openDrawer('${t.id}')">${t.title}</div>`
-    ).join("");
-    cells += `<div class="cal-cell"><div class="cal-day ${isToday?'today':''}">${d}</div>${evHTML}${taskHTML}</div>`;
+    const evHTML = dayEvents.slice(0, 4).map(ev => {
+      const time = ev.allDay ? "" : new Date(ev.start).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}) + " ";
+      return `<div class="cal-task cal-event" title="${ev.title}">${time}${ev.title}</div>`;
+    }).join("");
+    const more = dayEvents.length > 4 ? `<div style="font-size:10px;color:var(--text-mute);padding:0 4px">+${dayEvents.length-4} נוספים</div>` : "";
+    cells += `<div class="cal-cell"><div class="cal-day ${isToday?'today':''}">${d}</div>${evHTML}${more}</div>`;
   }
   return `<div class="card" style="overflow:hidden"><div class="cal-grid">
     ${["א","ב","ג","ד","ה","ו","ש"].map(d=>`<div class="cal-head">${d}</div>`).join("")}
