@@ -677,24 +677,26 @@ async function initData() {
 async function fetchCalendarEvents() {
   if (!googleAccessToken) return;
   try {
-    // First get list of calendars to find "עבודה"
     const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
       headers: { Authorization: "Bearer " + googleAccessToken }
     });
-    if (!listRes.ok) { console.warn("Calendar API error:", listRes.status); return; }
+    if (!listRes.ok) { console.warn("Calendar API:", listRes.status); return; }
     const listData = await listRes.json();
     
-    // Find the work calendar ("עבודה") or fall back to primary
-    const workCal = listData.items?.find(c => c.summary === "עבודה") || listData.items?.find(c => c.primary);
+    // Find work calendar - flexible matching
+    const workCal = listData.items?.find(c => c.summary?.trim() === "עבודה")
+      || listData.items?.find(c => c.summary?.includes("עבודה"))
+      || listData.items?.find(c => c.summary?.toLowerCase().includes("work"))
+      || listData.items?.find(c => c.primary);
     if (!workCal) return;
     
-    // Fetch events for current month
+    // Fetch 2 months range for navigation
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59).toISOString();
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+    const end = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59).toISOString();
     
     const evRes = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(workCal.id)}/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=100`,
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(workCal.id)}/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=200`,
       { headers: { Authorization: "Bearer " + googleAccessToken } }
     );
     if (!evRes.ok) return;
@@ -709,7 +711,7 @@ async function fetchCalendarEvents() {
       calName: workCal.summary,
     }));
     
-    if (currentView === "cal") renderView();
+    if (currentView === "cal" || currentView === "today") renderView();
   } catch (e) { console.warn("Calendar fetch error:", e); }
 }
 
@@ -718,7 +720,7 @@ async function fetchCalendarEvents() {
    ============================================================ */
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 function fmtDate(iso) { if (!iso) return ""; const p = iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; }
-function fmtDateShort(iso) { if (!iso) return ""; const p = iso.split("-"); return `${p[2]}/${p[1]}`; }
+function fmtDateShort(iso) { if (!iso) return ""; const p = iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; }
 function getCat(id) { return categories.find(c => c.id === id) || { name: "?", color: "#999" }; }
 function getPerson(id) { return people.find(p => p.id === id) || { name: "?", initials: "?", color: "#999" }; }
 function softColor(hex, dark) { return hex + (dark ? "30" : "1F"); }
@@ -1237,41 +1239,67 @@ const DAY_NAMES = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 
 function renderCalColumns() {
   const days = getCalDays();
-  const colCount = days.length;
   const todayStr = todayISO();
+  const hours = [7,8,9,10,11,12,13,14,15,16,17,18,19];
 
-  const cols = days.map(d => {
+  // Header row
+  let headerHTML = `<th style="width:54px;padding:6px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-mute)">שעה</th>`;
+  days.forEach(d => {
     const ds = isoFromDate(d);
     const isToday = ds === todayStr;
-    const dayTasks = tasks.filter(t => t.due === ds);
-    const dayEvents = calendarEvents.filter(ev => ev.start.startsWith(ds))
-      .sort((a, b) => a.start.localeCompare(b.start));
+    headerHTML += `<th style="padding:8px;text-align:center;border-bottom:2px solid var(--border);${isToday?'background:var(--drill-bg)':''}">
+      <div style="font-size:11px;color:var(--text-mute)">${DAY_NAMES[d.getDay()]}</div>
+      <div class="cal-day ${isToday?'today':''}" style="margin:4px auto">${d.getDate()}</div>
+    </th>`;
+  });
 
-    const evItems = dayEvents.map(ev => {
-      const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-      return `<div class="cal-col-item cal-event" title="${time}"><span style="font-size:11px;color:var(--coral);font-weight:600">${time}</span> 📅 ${ev.title}</div>`;
-    }).join("");
+  // Body rows
+  let bodyHTML = "";
+  hours.forEach(h => {
+    const hStr = `${String(h).padStart(2,"0")}:00`;
+    let rowHTML = `<td style="padding:4px 6px;font-size:11px;font-weight:600;color:var(--text-mute);text-align:center;border-top:1px solid var(--border-soft);vertical-align:top;white-space:nowrap">${hStr}</td>`;
 
-    const taskItems = dayTasks.map(t => {
-      const S = STATUS_MAP[t.status] || {};
-      return `<div class="cal-col-item" onclick="openDrawer('${t.id}')" style="cursor:pointer;border-right:3px solid ${S.color}">
-        <span class="task-dot" style="background:${S.color};width:8px;height:8px;display:inline-block;border-radius:50;margin-left:6px"></span>${t.title}
-      </div>`;
-    }).join("");
+    days.forEach(d => {
+      const ds = isoFromDate(d);
+      const isToday = ds === todayStr;
 
-    return `<div class="cal-column" style="flex:1;${isToday?'background:var(--drill-bg)':''}">
-      <div style="text-align:center;padding:10px;font-weight:600;border-bottom:1px solid var(--border-soft)">
-        <div style="font-size:12px;color:var(--text-mute)">${DAY_NAMES[d.getDay()]}</div>
-        <div class="cal-day ${isToday?'today':''}" style="margin:4px auto">${d.getDate()}</div>
-      </div>
-      <div style="padding:6px;min-height:300px">
-        ${evItems}${taskItems}
-        ${!dayEvents.length && !dayTasks.length ? '<div style="text-align:center;padding:20px;font-size:12px;color:var(--text-mute)">—</div>' : ''}
-      </div>
-    </div>`;
-  }).join("");
+      // Events at this hour
+      const evs = calendarEvents.filter(ev => {
+        if (!ev.start.startsWith(ds)) return false;
+        if (ev.allDay) return h === 7;
+        return new Date(ev.start).getHours() === h;
+      });
 
-  return `<div class="card" style="overflow:hidden"><div style="display:flex">${cols}</div></div>`;
+      // Tasks (show at 8am row)
+      const tks = h === 8 ? tasks.filter(t => t.due === ds && t.status !== "done") : [];
+
+      let cellHTML = "";
+      evs.forEach(ev => {
+        const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+        const endT = !ev.allDay ? " — " + new Date(ev.end).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}) : "";
+        cellHTML += `<div style="background:linear-gradient(120deg,rgba(255,142,114,0.2),rgba(255,203,107,0.12));border-right:3px solid var(--coral);border-radius:5px;padding:4px 7px;margin-bottom:3px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ev.title}">
+          <b style="color:var(--coral)">${time}${endT}</b> ${ev.title}
+        </div>`;
+      });
+      tks.forEach(t => {
+        const sc = STATUS_MAP[t.status]?.color || "#999";
+        cellHTML += `<div style="background:${softColor(sc,isDark())};border-right:3px solid ${sc};border-radius:5px;padding:4px 7px;margin-bottom:3px;font-size:11px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openDrawer('${t.id}')">
+          ✅ ${t.title}
+        </div>`;
+      });
+
+      rowHTML += `<td style="border-top:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}padding:2px 4px;vertical-align:top">${cellHTML}</td>`;
+    });
+
+    bodyHTML += `<tr>${rowHTML}</tr>`;
+  });
+
+  return `<div class="card" style="overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <thead><tr>${headerHTML}</tr></thead>
+      <tbody>${bodyHTML}</tbody>
+    </table>
+  </div>`;
 }
 
 function renderCalMonth() {
