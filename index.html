@@ -544,7 +544,7 @@ let ADMIN_UID = null;
    DATA
    ============================================================ */
 const STATUS_MAP = {
-  todo:       { label: "לביצוע",     color: "#94A3B8", icon: "○" },
+  todo:       { label: "לביצוע",     color: "#6366F1", icon: "○" },
   inprogress: { label: "בתהליך",     color: "#F59E0B", icon: "◔" },
   waiting:    { label: "ממתין לאחר", color: "#3B82F6", icon: "⏸" },
   done:       { label: "הושלם",      color: "#10B981", icon: "✓" },
@@ -1019,37 +1019,35 @@ function renderToday(el) {
     <h1 class="page-title">היום שלי</h1>
     <p class="page-sub">${dayName} · ${todayTasks.length} משימות להיום${overdue.length ? ` · <b style="color:var(--red)">${overdue.length} באיחור</b>` : ''}</p>
 
-    <div style="display:grid;grid-template-columns:${todayEvents.length ? '1fr 1fr' : '1fr'};gap:16px">
-      ${todayEvents.length ? `
-      <!-- TODAY'S SCHEDULE -->
-      <div class="card">
-        <div class="card-head">📅 לוז היום מהיומן</div>
-        <div style="padding:12px">
-          ${todayEvents.map(ev => {
-            const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-            const endTime = ev.allDay ? "" : " — " + new Date(ev.end).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-            return `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border-soft)">
-              <div style="min-width:90px;font-size:13px;font-weight:600;color:var(--coral)">${time}${endTime}</div>
-              <div style="font-size:14px">${ev.title}</div>
-            </div>`;
-          }).join("")}
-        </div>
-      </div>` : ''}
-
-      <!-- TODAY'S TASKS -->
-      <div>
-        ${todayTasks.length ? `
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-head">✅ משימות להיום</div>
-          ${todayTasks.map(t => taskRowHTML(t)).join("")}
-        </div>` : '<div class="card" style="margin-bottom:16px"><div class="empty">אין משימות להיום 🎉</div></div>'}
-
-        ${overdue.length ? `
-        <div class="card" style="border-color:var(--red)">
-          <div class="card-head" style="color:var(--red)">⚠️ באיחור (${overdue.length})</div>
-          ${overdue.map(t => taskRowHTML(t)).join("")}
-        </div>` : ''}
+    ${todayEvents.length ? `
+    <!-- TODAY'S SCHEDULE -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head">📅 לוז היום מהיומן (${todayEvents.length} מופעים)</div>
+      <div style="padding:16px;display:grid;gap:8px">
+        ${todayEvents.map(ev => {
+          const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+          const endTime = ev.allDay ? "" : new Date(ev.end).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+          return `<div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-radius:10px;background:linear-gradient(120deg,rgba(255,142,114,0.1),rgba(255,203,107,0.06));border-right:4px solid var(--coral)">
+            <div style="min-width:120px;font-size:15px;font-weight:700;color:var(--coral);white-space:nowrap">${time}${endTime ? ` — ${endTime}` : ''}</div>
+            <div style="font-size:14px;font-weight:500">${ev.title}</div>
+          </div>`;
+        }).join("")}
       </div>
+    </div>` : ''}
+
+    <div style="display:grid;grid-template-columns:${overdue.length ? '1fr 1fr' : '1fr'};gap:16px">
+      <!-- TODAY'S TASKS -->
+      ${todayTasks.length ? `
+      <div class="card">
+        <div class="card-head">✅ משימות להיום (${todayTasks.length})</div>
+        ${todayTasks.map(t => taskRowHTML(t)).join("")}
+      </div>` : '<div class="card"><div class="empty">אין משימות להיום 🎉</div></div>'}
+
+      ${overdue.length ? `
+      <div class="card" style="border-color:var(--red)">
+        <div class="card-head" style="color:var(--red)">⚠️ באיחור (${overdue.length})</div>
+        ${overdue.map(t => taskRowHTML(t)).join("")}
+      </div>` : ''}
     </div>
   `;
 }
@@ -1270,65 +1268,100 @@ const DAY_NAMES = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 function renderCalColumns() {
   const days = getCalDays();
   const todayStr = todayISO();
-  const hours = [7,8,9,10,11,12,13,14,15,16,17,18,19];
+  const START_H = 7, END_H = 20, ROW_H = 44;
+  const totalH = (END_H - START_H) * ROW_H;
 
-  // Header row
-  let headerHTML = `<th style="width:54px;padding:6px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-mute)">שעה</th>`;
-  days.forEach(d => {
+  // Hour lines
+  let hourLines = "";
+  for (let h = START_H; h < END_H; h++) {
+    const top = (h - START_H) * ROW_H;
+    hourLines += `<div style="position:absolute;top:${top}px;right:0;left:0;height:${ROW_H}px;border-top:1px solid var(--border-soft)"></div>`;
+  }
+
+  // Time column
+  let timeCol = "";
+  for (let h = START_H; h < END_H; h++) {
+    timeCol += `<div style="height:${ROW_H}px;display:flex;align-items:flex-start;justify-content:center;padding-top:2px;font-size:11px;font-weight:600;color:var(--text-mute)">${String(h).padStart(2,"0")}:00</div>`;
+  }
+
+  // Day columns
+  const dayColsHTML = days.map(d => {
     const ds = isoFromDate(d);
     const isToday = ds === todayStr;
-    headerHTML += `<th style="padding:8px;text-align:center;border-bottom:2px solid var(--border);${isToday?'background:var(--drill-bg)':''}">
-      <div style="font-size:11px;color:var(--text-mute)">${DAY_NAMES[d.getDay()]}</div>
-      <div class="cal-day ${isToday?'today':''}" style="margin:4px auto">${d.getDate()}</div>
-    </th>`;
-  });
 
-  // Body rows
-  let bodyHTML = "";
-  hours.forEach(h => {
-    const hStr = `${String(h).padStart(2,"0")}:00`;
-    let rowHTML = `<td style="padding:4px 6px;font-size:11px;font-weight:600;color:var(--text-mute);text-align:center;border-top:1px solid var(--border-soft);vertical-align:top;white-space:nowrap">${hStr}</td>`;
+    // Get events for this day
+    const dayEvs = calendarEvents.filter(ev => ev.start.startsWith(ds) && !ev.allDay).map(ev => {
+      const s = new Date(ev.start), e = new Date(ev.end);
+      const startMin = s.getHours() * 60 + s.getMinutes();
+      const endMin = e.getHours() * 60 + e.getMinutes();
+      return { ...ev, startMin, endMin, sH: s, eH: e };
+    }).sort((a, b) => a.startMin - b.startMin);
 
-    days.forEach(d => {
-      const ds = isoFromDate(d);
-      const isToday = ds === todayStr;
+    const allDayEvs = calendarEvents.filter(ev => ev.start.startsWith(ds) && ev.allDay);
 
-      // Events at this hour
-      const evs = calendarEvents.filter(ev => {
-        if (!ev.start.startsWith(ds)) return false;
-        if (ev.allDay) return h === 7;
-        return new Date(ev.start).getHours() === h;
-      });
+    // Detect overlaps and assign columns
+    const cols = [];
+    dayEvs.forEach(ev => {
+      let placed = false;
+      for (let c = 0; c < cols.length; c++) {
+        if (cols[c].every(e => ev.startMin >= e.endMin || ev.endMin <= e.startMin)) {
+          cols[c].push(ev); ev._col = c; placed = true; break;
+        }
+      }
+      if (!placed) { ev._col = cols.length; cols.push([ev]); }
+    });
+    const totalCols = Math.max(1, cols.length);
 
-      // Tasks (show at 8am row)
-      const tks = h === 8 ? tasks.filter(t => t.due === ds && t.status !== "done") : [];
-
-      let cellHTML = "";
-      evs.forEach(ev => {
-        const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
-        const endT = !ev.allDay ? " — " + new Date(ev.end).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}) : "";
-        cellHTML += `<div style="background:linear-gradient(120deg,rgba(255,142,114,0.2),rgba(255,203,107,0.12));border-right:3px solid var(--coral);border-radius:5px;padding:4px 7px;margin-bottom:3px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${ev.title}">
-          <b style="color:var(--coral)">${time}${endT}</b> ${ev.title}
-        </div>`;
-      });
-      tks.forEach(t => {
-        const sc = STATUS_MAP[t.status]?.color || "#999";
-        cellHTML += `<div style="background:${softColor(sc,isDark())};border-right:3px solid ${sc};border-radius:5px;padding:4px 7px;margin-bottom:3px;font-size:11px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="openDrawer('${t.id}')">
-          ✅ ${t.title}
-        </div>`;
-      });
-
-      rowHTML += `<td style="border:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}padding:2px 4px;vertical-align:top">${cellHTML}</td>`;
+    // Render events
+    let evsHTML = "";
+    dayEvs.forEach(ev => {
+      const top = ((ev.startMin / 60) - START_H) * ROW_H;
+      const height = Math.max(ROW_H * 0.6, ((ev.endMin - ev.startMin) / 60) * ROW_H);
+      const width = 100 / totalCols;
+      const right = ev._col * width;
+      const time = ev.sH.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+      const endT = ev.eH.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+      evsHTML += `<div style="position:absolute;top:${top}px;right:${right}%;width:${width}%;height:${height}px;padding:2px 4px;z-index:2" title="${ev.title}">
+        <div style="background:linear-gradient(160deg,rgba(255,142,114,0.25),rgba(255,203,107,0.15));border-right:3px solid var(--coral);border-radius:6px;height:100%;padding:4px 8px;font-size:11px;overflow:hidden">
+          <div style="color:var(--coral);font-weight:700">${time} — ${endT}</div>
+          <div style="margin-top:2px">${ev.title}</div>
+        </div>
+      </div>`;
     });
 
-    bodyHTML += `<tr>${rowHTML}</tr>`;
-  });
+    // All day events at top
+    let allDayHTML = allDayEvs.map(ev =>
+      `<div style="background:linear-gradient(120deg,rgba(255,142,114,0.2),rgba(255,203,107,0.12));border-right:3px solid var(--coral);border-radius:4px;padding:3px 6px;margin:2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b style="color:var(--coral)">כל היום</b> ${ev.title}</div>`
+    ).join("");
+
+    // Tasks at 8am
+    const dayTasks = tasks.filter(t => t.due === ds && t.status !== "done");
+    dayTasks.forEach(t => {
+      const sc = STATUS_MAP[t.status]?.color || "#999";
+      const top = (8 - START_H) * ROW_H;
+      evsHTML += `<div style="position:absolute;top:${top}px;right:0;width:100%;padding:2px 4px;z-index:1">
+        <div style="background:${softColor(sc,isDark())};border-right:3px solid ${sc};border-radius:5px;padding:3px 6px;font-size:11px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" onclick="openDrawer('${t.id}')">✅ ${t.title}</div>
+      </div>`;
+    });
+
+    return `<div style="flex:1;border-left:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}">
+      <div style="text-align:center;padding:8px;font-weight:600;border-bottom:2px solid var(--border)">
+        <div style="font-size:11px;color:var(--text-mute)">${DAY_NAMES[d.getDay()]}</div>
+        <div class="cal-day ${isToday?'today':''}" style="margin:4px auto">${d.getDate()}</div>
+      </div>
+      ${allDayHTML ? `<div style="border-bottom:1px solid var(--border-soft)">${allDayHTML}</div>` : ""}
+      <div style="position:relative;height:${totalH}px">
+        ${hourLines}
+        ${evsHTML}
+      </div>
+    </div>`;
+  }).join("");
 
   return `<div class="card" style="overflow:hidden">
-    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
-      <thead><tr>${headerHTML}</tr></thead>
-      <tbody>${bodyHTML}</tbody>
-    </table>
+    <div style="display:flex">
+      <div style="width:54px;flex-shrink:0;padding-top:58px;border-left:1px solid var(--border-soft)">${timeCol}</div>
+      ${dayColsHTML}
+    </div>
   </div>`;
 }
 
@@ -1579,9 +1612,12 @@ function renderAdmin(el) {
             </div>
           </div>
         `).join("")}
-        <div class="admin-add-row">
-          <input class="input" id="newCatName" placeholder="שם קטגוריה חדשה…">
-          <input type="color" class="admin-color-input" id="newCatColor" value="#2BB5A3" title="צבע">
+        <div class="admin-add-row" style="flex-wrap:wrap">
+          <input class="input" id="newCatName" placeholder="שם קטגוריה חדשה…" style="flex:2;min-width:140px">
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+            ${PRESET_COLORS.slice(0,8).map(clr => `<div onclick="document.getElementById('newCatColor').value='${clr}';this.parentNode.querySelectorAll('div').forEach(e=>e.style.outline='');this.style.outline='2px solid var(--text)'" style="width:24px;height:24px;border-radius:6px;background:${clr};cursor:pointer"></div>`).join("")}
+            <input type="hidden" id="newCatColor" value="#2BB5A3">
+          </div>
           <button class="btn-primary" onclick="addCat()" style="white-space:nowrap">+ הוסף</button>
         </div>
       </div>
@@ -1607,10 +1643,13 @@ function renderAdmin(el) {
             </div>
           </div>
         `).join("")}
-        <div class="admin-add-row">
-          <input class="input" id="newPersonName" placeholder="שם…">
-          <input class="input" id="newPersonEmail" placeholder="מייל…" style="flex:1.5">
-          <input type="color" class="admin-color-input" id="newPersonColor" value="#3B82F6" title="צבע">
+        <div class="admin-add-row" style="flex-wrap:wrap">
+          <input class="input" id="newPersonName" placeholder="שם…" style="min-width:100px">
+          <input class="input" id="newPersonEmail" placeholder="מייל…" style="flex:1.5;min-width:140px">
+          <div style="display:flex;gap:4px;align-items:center">
+            ${PRESET_COLORS.slice(0,6).map(clr => `<div onclick="document.getElementById('newPersonColor').value='${clr}';this.parentNode.querySelectorAll('div').forEach(e=>e.style.outline='');this.style.outline='2px solid var(--text)'" style="width:24px;height:24px;border-radius:6px;background:${clr};cursor:pointer"></div>`).join("")}
+            <input type="hidden" id="newPersonColor" value="#42B4E6">
+          </div>
           <button class="btn-primary" onclick="addPerson()" style="white-space:nowrap">+ הוסף</button>
         </div>
       </div>
@@ -1690,10 +1729,41 @@ async function addCat() {
 function editCatPrompt(id) {
   const c = categories.find(x => x.id === id);
   if (!c) return;
-  const name = prompt("שם חדש לקטגוריה:", c.name);
-  if (name === null || !name.trim()) return;
-  const color = prompt("צבע (hex, למשל #3B82F6):", c.color);
-  updateCat(id, name.trim(), color || c.color);
+  showEditModal("עריכת קטגוריה", c.name, c.color, "", false, (name, color) => updateCat(id, name, color));
+}
+
+function showEditModal(title, nameVal, colorVal, emailVal, showEmail, onSave) {
+  const palette = PRESET_COLORS.map(clr =>
+    `<div onclick="document.getElementById('editColorVal').value='${clr}';document.querySelectorAll('.clr-opt').forEach(e=>e.style.outline='');this.style.outline='3px solid #fff'" class="clr-opt" style="width:32px;height:32px;border-radius:8px;background:${clr};cursor:pointer;${clr===colorVal?'outline:3px solid #fff':''}"></div>`
+  ).join("");
+  
+  const modal = document.createElement("div");
+  modal.id = "editModal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:55;display:grid;place-items:center;background:var(--overlay);padding:16px";
+  modal.innerHTML = `<div style="background:var(--surface);border-radius:20px;padding:24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);backdrop-filter:blur(20px)" onclick="event.stopPropagation()">
+    <div style="font-weight:700;font-size:18px;margin-bottom:16px">${title}</div>
+    <div class="field"><div class="field-label">שם</div><input class="input" id="editNameVal" value="${nameVal}"></div>
+    ${showEmail ? `<div class="field"><div class="field-label">מייל</div><input class="input" id="editEmailVal" value="${emailVal}"></div>` : ''}
+    <div class="field">
+      <div class="field-label">צבע</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${palette}</div>
+      <input type="hidden" id="editColorVal" value="${colorVal}">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn-cancel" onclick="document.getElementById('editModal').remove()">ביטול</button>
+      <button class="btn-submit" onclick="
+        const n=document.getElementById('editNameVal').value.trim();
+        if(!n)return;
+        const c=document.getElementById('editColorVal').value;
+        const e=document.getElementById('editEmailVal')?.value||'';
+        document.getElementById('editModal').remove();
+        window._editCb(n,c,e);
+      ">שמור</button>
+    </div>
+  </div>`;
+  modal.onclick = () => modal.remove();
+  window._editCb = onSave;
+  document.body.appendChild(modal);
 }
 
 async function updateCat(id, name, color) {
@@ -1739,10 +1809,13 @@ async function addPerson() {
 function editPersonPrompt(id) {
   const p = people.find(x => x.id === id);
   if (!p) return;
-  const name = prompt("שם:", p.name);
-  if (name === null || !name.trim()) return;
-  const email = prompt("מייל:", p.email || "");
-  updatePerson(id, name.trim(), email || "");
+  showEditModal("עריכת איש קשר", p.name, p.color, p.email || "", true, (name, color, email) => {
+    updatePerson(id, name, email);
+    // Also update color
+    userDoc("people").doc(id).update({ color });
+    const pp = people.find(x => x.id === id);
+    if (pp) pp.color = color;
+  });
 }
 
 async function updatePerson(id, name, email) {
