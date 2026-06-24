@@ -192,7 +192,7 @@ canvas { max-height: 200px; }
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px;
   border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap;
 }
-.task-due { font-size: 12px; display: flex; align-items: center; gap: 4px; width: 60px; justify-content: flex-end; }
+.task-due { font-size: 12px; display: flex; align-items: center; gap: 4px; min-width: 110px; justify-content: flex-end; white-space: nowrap; }
 .task-avatars { display: flex; gap: -6px; width: 60px; justify-content: flex-end; }
 .task-avatars .avatar-sm { margin-inline-start: -6px; border: 2px solid var(--surface); }
 
@@ -588,12 +588,26 @@ function googleLogin() {
   auth.signInWithPopup(provider).then(result => {
     if (result.credential) {
       googleAccessToken = result.credential.accessToken;
+      try { sessionStorage.setItem("tc-gtoken", googleAccessToken); } catch(e) {}
       fetchCalendarEvents();
     }
   }).catch(err => {
     document.getElementById("loginError").textContent = "שגיאה: " + err.message;
     document.getElementById("loginError").classList.remove("hidden");
   });
+}
+
+function reconnectCalendar() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
+  auth.currentUser.reauthenticateWithPopup(provider).then(result => {
+    if (result.credential) {
+      googleAccessToken = result.credential.accessToken;
+      try { sessionStorage.setItem("tc-gtoken", googleAccessToken); } catch(e) {}
+      fetchCalendarEvents();
+      showToast("📅 יומן Google חובר בהצלחה!");
+    }
+  }).catch(err => { showToast("שגיאה בחיבור יומן: " + err.message); });
 }
 
 auth.onAuthStateChanged(async user => {
@@ -611,9 +625,13 @@ auth.onAuthStateChanged(async user => {
     avatar.title = user.displayName || user.email;
     document.getElementById("userMenuName").textContent = user.displayName || user.email;
 
+    // Restore calendar token
+    try { googleAccessToken = googleAccessToken || sessionStorage.getItem("tc-gtoken"); } catch(e) {}
+
     await initData();
     renderNav();
     renderView();
+    if (googleAccessToken) fetchCalendarEvents();
   } else {
     currentUser = null;
     document.getElementById("loginScreen").classList.remove("hidden");
@@ -895,12 +913,21 @@ function renderDashboard(el) {
       <div class="card">
         <div class="card-head"><span style="color:var(--violet)">●</span> פעילות אחרונה</div>
         <div style="padding:16px">
-          ${activityLog.slice(0, 8).map(a => `
+          ${activityLog.slice(0, 3).map(a => `
             <div class="activity-item">
               <div class="activity-dot"></div>
               <div><b>${a.who}</b> ${a.action} · ${a.target}<div class="activity-time">${formatTime(a.time)}</div></div>
             </div>
           `).join("") || '<div class="empty">אין פעילות עדיין.</div>'}
+          <div id="activityMore" class="hidden">
+            ${activityLog.slice(3, 20).map(a => `
+              <div class="activity-item">
+                <div class="activity-dot"></div>
+                <div><b>${a.who}</b> ${a.action} · ${a.target}<div class="activity-time">${formatTime(a.time)}</div></div>
+              </div>
+            `).join("")}
+          </div>
+          ${activityLog.length > 3 ? `<button onclick="const m=document.getElementById('activityMore');const on=m.classList.toggle('hidden');this.textContent=on?'הצג עוד (${activityLog.length-3})':'הצג פחות'" style="font-size:12px;color:var(--violet);padding:6px 0;font-weight:600;width:100%;text-align:center">הצג עוד (${activityLog.length-3})</button>` : ''}
         </div>
       </div>
     </div>
@@ -1096,9 +1123,10 @@ function renderBoard(el) {
             </div>
             ${items.map(t => {
               const P = PRIO_MAP[t.prio];
+              const S = STATUS_MAP[t.status] || STATUS_MAP.todo;
               const avatars = (t.tags||[]).map(pid => avatarHTML(getPerson(pid), true)).join("");
               return `
-                <div class="kanban-card" draggable="true" ondragstart="event.dataTransfer.setData('text','${t.id}')" onclick="openDrawer('${t.id}')" style="border-right-color:${P.color}">
+                <div class="kanban-card" draggable="true" ondragstart="event.dataTransfer.setData('text','${t.id}')" onclick="openDrawer('${t.id}')" style="border-right-color:${P.color};background:${softColor(S.color,isDark())};border-top:2px solid ${S.color}">
                   <div class="kanban-card-title">${t.title}</div>
                   <div class="kanban-card-foot">${pillHTML(P.label, P.color)}<div style="display:flex">${avatars}</div></div>
                 </div>`;
@@ -1145,7 +1173,7 @@ function renderBoard(el) {
           <div style="width:10px"></div>
           <div class="task-info">משימה</div>
           <div style="width:80px;text-align:center">תיעדוף</div>
-          <div style="width:60px;text-align:center">תאריך</div>
+          <div style="min-width:110px;text-align:center">תאריך</div>
           <div style="width:60px;text-align:center">אנשים</div>
         </div>
         ${ft.length ? ft.map(t => taskRowHTML(t)).join("") : '<div class="empty">אין משימות תואמות לסינון</div>'}
@@ -1197,7 +1225,9 @@ function renderCalendar(el) {
       ${modes.map(m => `<button class="filter-btn ${calViewMode===m.id?'active':''}" onclick="calViewMode='${m.id}';renderView()" style="padding:5px 12px;border-radius:8px;${calViewMode===m.id?'background:var(--violet);color:#fff':'border:1px solid var(--border)'}">${m.label}</button>`).join("")}
     </div>
     <p class="page-sub" style="margin-bottom:12px">
-      ${calConnected ? '📅 פגישות מיומן "<b>עבודה</b>" · משימות לפי תאריך יעד' : 'משימות לפי תאריך יעד'}
+      ${calConnected
+        ? '📅 פגישות מיומן "<b>עבודה</b>" · משימות לפי תאריך יעד'
+        : '⚠️ יומן Google לא מחובר · <button onclick="reconnectCalendar()" style="color:var(--coral);font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;font-family:inherit">לחץ כאן לחיבור היומן</button>'}
     </p>
     ${calViewMode === "month" ? renderCalMonth() : renderCalColumns()}
   `;
@@ -1288,7 +1318,7 @@ function renderCalColumns() {
         </div>`;
       });
 
-      rowHTML += `<td style="border-top:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}padding:2px 4px;vertical-align:top">${cellHTML}</td>`;
+      rowHTML += `<td style="border:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}padding:2px 4px;vertical-align:top">${cellHTML}</td>`;
     });
 
     bodyHTML += `<tr>${rowHTML}</tr>`;
