@@ -460,7 +460,13 @@ textarea.input { resize: none; min-height: 70px; }
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       משימה
     </button>
-    <div class="avatar" id="userAvatar" style="background:var(--violet)" title=""></div>
+    <div style="position:relative">
+      <div class="avatar" id="userAvatar" style="background:var(--violet);cursor:pointer" title="" onclick="document.getElementById('userMenu').classList.toggle('hidden')"></div>
+      <div id="userMenu" class="hidden" style="position:absolute;left:0;top:42px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:160px;box-shadow:0 8px 24px var(--shadow);z-index:50;backdrop-filter:blur(16px)">
+        <div style="padding:8px 12px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border-soft);margin-bottom:4px" id="userMenuName"></div>
+        <button onclick="auth.signOut();document.getElementById('userMenu').classList.add('hidden')" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border-radius:8px;font-size:13px;color:var(--red);text-align:right" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background='transparent'">🚪 התנתק</button>
+      </div>
+    </div>
   </header>
 
   <!-- CONTENT -->
@@ -584,6 +590,7 @@ auth.onAuthStateChanged(async user => {
       avatar.textContent = user.displayName?.charAt(0) || "?";
     }
     avatar.title = user.displayName || user.email;
+    document.getElementById("userMenuName").textContent = user.displayName || user.email;
 
     await initData();
     renderNav();
@@ -698,8 +705,10 @@ function isDark() { return document.body.dataset.theme === "dark"; }
 
 function toggleTheme() {
   const d = document.body.dataset.theme === "dark";
-  document.body.dataset.theme = d ? "light" : "dark";
+  const newTheme = d ? "light" : "dark";
+  document.body.dataset.theme = newTheme;
   document.getElementById("themeBtn").textContent = d ? "🌙" : "☀️";
+  try { localStorage.setItem("tc-theme", newTheme); } catch(e) {}
   if (charts.donut) { charts.donut.destroy(); charts.bar.destroy(); }
   if (currentView === "dash") renderView();
 }
@@ -1519,9 +1528,23 @@ async function clearDoneConfirm() {
 }
 
 /* ============================================================
-   INIT THEME — default to light
+   INIT THEME — load saved preference
    ============================================================ */
-// Light theme is default — user can toggle manually
+try {
+  const saved = localStorage.getItem("tc-theme");
+  if (saved === "dark") {
+    document.body.dataset.theme = "dark";
+    document.getElementById("themeBtn").textContent = "☀️";
+  }
+} catch(e) {}
+
+// Close user menu on outside click
+document.addEventListener("click", e => {
+  const menu = document.getElementById("userMenu");
+  if (menu && !menu.classList.contains("hidden") && !e.target.closest("#userAvatar") && !e.target.closest("#userMenu")) {
+    menu.classList.add("hidden");
+  }
+});
 </script>
 </body>
 </html>
