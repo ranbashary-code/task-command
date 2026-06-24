@@ -31,10 +31,10 @@
   --overlay: rgba(0,0,0,.35); --shadow: rgba(26,44,42,.12);
 }
 [data-theme="dark"] {
-  --canvas: #2B1B52; --surface: rgba(255,255,255,0.07); --surface-alt: rgba(255,255,255,0.04);
-  --border: rgba(255,255,255,0.16); --border-soft: rgba(255,255,255,0.08);
-  --text: #F7F3FC; --text-soft: #CFC2E8; --text-mute: #9B8CBF;
-  --banner-bg: rgba(43,27,82,0.92); --input-bg: rgba(255,255,255,0.07); --drill-bg: rgba(255,142,114,0.08);
+  --canvas: #2B1B52; --surface: rgba(20,10,45,0.55); --surface-alt: rgba(30,18,58,0.4);
+  --border: rgba(255,255,255,0.13); --border-soft: rgba(255,255,255,0.07);
+  --text: #F7F3FC; --text-soft: #D4C8ED; --text-mute: #A898C8;
+  --banner-bg: rgba(30,15,55,0.82); --input-bg: rgba(20,10,45,0.6); --drill-bg: rgba(255,142,114,0.1);
   --overlay: rgba(0,0,0,.55); --shadow: rgba(0,0,0,.4);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -221,6 +221,11 @@ canvas { max-height: 200px; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
   cursor: pointer;
 }
+.cal-event {
+  background: linear-gradient(120deg, rgba(255,142,114,0.15), rgba(255,203,107,0.15)) !important;
+  color: var(--coral) !important; border-right: 2px solid var(--coral);
+  cursor: default;
+}
 
 /* BOTTOM GRID */
 .bottom-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
@@ -345,21 +350,23 @@ textarea.input { resize: none; min-height: 70px; }
 [data-theme="dark"] .add-card,
 [data-theme="dark"] .drawer,
 [data-theme="dark"] .toast {
-  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 4px 24px rgba(0,0,0,.2);
 }
 [data-theme="dark"] .banner {
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  background: rgba(43,27,82,0.75);
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  background: rgba(30,15,55,0.82);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 2px 20px rgba(0,0,0,.2);
 }
 [data-theme="dark"] .kanban-card {
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(25,12,50,0.5);
 }
-[data-theme="dark"] .nav-tabs { background: rgba(255,255,255,0.06); }
-[data-theme="dark"] .filter-bar { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
-[data-theme="dark"] .icon-btn { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+[data-theme="dark"] .nav-tabs { background: rgba(20,10,40,0.5); }
+[data-theme="dark"] .filter-bar { background: rgba(20,10,40,0.5); border-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .icon-btn { background: rgba(20,10,40,0.4); border-color: rgba(255,255,255,0.1); }
 [data-theme="dark"] body { background: transparent; }
 
 /* EMPTY */
@@ -543,13 +550,22 @@ let drillFilter = null;
 let statusFilter = "all";
 let searchQuery = "";
 let charts = {};
+let calendarEvents = [];
 
 /* ============================================================
    AUTH
    ============================================================ */
+let googleAccessToken = null;
+
 function googleLogin() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(err => {
+  provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
+  auth.signInWithPopup(provider).then(result => {
+    if (result.credential) {
+      googleAccessToken = result.credential.accessToken;
+      fetchCalendarEvents();
+    }
+  }).catch(err => {
     document.getElementById("loginError").textContent = "שגיאה: " + err.message;
     document.getElementById("loginError").classList.remove("hidden");
   });
@@ -627,6 +643,48 @@ async function initData() {
     activityLog = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (currentView === "dash") renderView();
   });
+}
+
+/* ============================================================
+   GOOGLE CALENDAR INTEGRATION
+   ============================================================ */
+async function fetchCalendarEvents() {
+  if (!googleAccessToken) return;
+  try {
+    // First get list of calendars to find "עבודה"
+    const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+      headers: { Authorization: "Bearer " + googleAccessToken }
+    });
+    if (!listRes.ok) { console.warn("Calendar API error:", listRes.status); return; }
+    const listData = await listRes.json();
+    
+    // Find the work calendar ("עבודה") or fall back to primary
+    const workCal = listData.items?.find(c => c.summary === "עבודה") || listData.items?.find(c => c.primary);
+    if (!workCal) return;
+    
+    // Fetch events for current month
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59).toISOString();
+    
+    const evRes = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(workCal.id)}/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=100`,
+      { headers: { Authorization: "Bearer " + googleAccessToken } }
+    );
+    if (!evRes.ok) return;
+    const evData = await evRes.json();
+    
+    calendarEvents = (evData.items || []).map(ev => ({
+      id: ev.id,
+      title: ev.summary || "(ללא כותרת)",
+      start: ev.start?.dateTime || ev.start?.date || "",
+      end: ev.end?.dateTime || ev.end?.date || "",
+      allDay: !!ev.start?.date,
+      calName: workCal.summary,
+    }));
+    
+    if (currentView === "cal") renderView();
+  } catch (e) { console.warn("Calendar fetch error:", e); }
 }
 
 /* ============================================================
@@ -992,21 +1050,40 @@ function renderCalendar(el) {
   const monthName = now.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
   const todayDate = now.getDate();
 
+  // Re-fetch calendar events when viewing
+  if (googleAccessToken) fetchCalendarEvents();
+
   let cells = "";
   for (let i = 0; i < first; i++) cells += '<div class="cal-cell"></div>';
   for (let d = 1; d <= days; d++) {
     const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     const dayTasks = tasks.filter(t => t.due === ds);
+    const dayEvents = calendarEvents.filter(ev => ev.start.startsWith(ds));
     const isToday = d === todayDate;
+
+    const evHTML = dayEvents.slice(0, 2).map(ev => {
+      const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+      return `<div class="cal-task cal-event" title="${ev.title} · ${time}">📅 ${ev.title}</div>`;
+    }).join("");
+
+    const taskHTML = dayTasks.slice(0, 3 - dayEvents.length).map(t =>
+      `<div class="cal-task" style="background:${softColor(STATUS_MAP[t.status]?.color||'#999',isDark())};color:${STATUS_MAP[t.status]?.color||'#999'}" onclick="openDrawer('${t.id}')">${t.title}</div>`
+    ).join("");
+
     cells += `<div class="cal-cell">
       <div class="cal-day ${isToday?'today':''}">${d}</div>
-      ${dayTasks.slice(0, 3).map(t => `<div class="cal-task" style="background:${softColor(STATUS_MAP[t.status]?.color||'#999',isDark())};color:${STATUS_MAP[t.status]?.color||'#999'}" onclick="openDrawer('${t.id}')">${t.title}</div>`).join("")}
+      ${evHTML}${taskHTML}
     </div>`;
   }
 
+  const calConnected = calendarEvents.length > 0 || googleAccessToken;
   el.innerHTML = `
     <h1 class="page-title">לוח שנה · ${monthName}</h1>
-    <p class="page-sub">משימות לפי תאריך יעד · הפגישות נשארות ביומן Google שלך</p>
+    <p class="page-sub">
+      ${calConnected
+        ? '📅 פגישות מיומן "<b>עבודה</b>" מוצגות · משימות לפי תאריך יעד'
+        : 'משימות לפי תאריך יעד · <span style="color:var(--amber)">⚠️ יומן Google לא מחובר — התנתק והיכנס מחדש כדי לאשר גישה</span>'}
+    </p>
     <div class="card" style="overflow:hidden">
       <div class="cal-grid">
         ${["א","ב","ג","ד","ה","ו","ש"].map(d=>`<div class="cal-head">${d}</div>`).join("")}
