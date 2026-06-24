@@ -226,6 +226,13 @@ canvas { max-height: 200px; }
   color: var(--coral) !important; border-right: 2px solid var(--coral);
   cursor: default;
 }
+.cal-column { border-left: 1px solid var(--border-soft); }
+.cal-column:last-child { border-left: none; }
+.cal-col-item {
+  font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 4px;
+  background: var(--surface-alt); border: 1px solid var(--border-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* BOTTOM GRID */
 .bottom-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
@@ -238,6 +245,13 @@ canvas { max-height: 200px; }
 .filter-bar { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-alt); border: 1px solid var(--border); }
 .filter-btn { padding: 6px 14px; border-radius: 10px; font-size: 13px; font-weight: 500; transition: .2s; color: var(--text-soft); }
 .filter-btn.active { background: var(--violet); color: #fff; }
+.filters-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.filter-group { display: flex; align-items: center; gap: 4px; }
+.filter-label { font-size: 11px; font-weight: 600; color: var(--text-mute); margin-left: 4px; }
+.filter-select {
+  padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--input-bg); font-size: 12px; color: var(--text); outline: none;
+}
 
 /* CAT SECTION */
 .cat-section { margin-bottom: 12px; }
@@ -489,9 +503,9 @@ textarea.input { resize: none; min-height: 70px; }
       <div class="field-row" style="margin-bottom:12px">
         <select class="input" id="addCat"></select>
         <select class="input" id="addPrio">
-          <option value="high">עדיפות גבוה</option>
-          <option value="medium" selected>עדיפות בינוני</option>
-          <option value="low">עדיפות נמוך</option>
+          <option value="high">תיעדוף גבוה</option>
+          <option value="medium" selected>תיעדוף בינוני</option>
+          <option value="low">תיעדוף נמוך</option>
         </select>
       </div>
       <div class="field-row">
@@ -554,9 +568,14 @@ let activityLog = [];
 let currentView = "dash";
 let drillFilter = null;
 let statusFilter = "all";
+let prioFilter = "all";
+let personFilter = "all";
+let catFilter = "all";
 let searchQuery = "";
 let charts = {};
 let calendarEvents = [];
+let calViewMode = "month"; // day, 3day, workweek, week, month
+let calBaseDate = new Date();
 
 /* ============================================================
    AUTH
@@ -698,6 +717,8 @@ async function fetchCalendarEvents() {
    HELPERS
    ============================================================ */
 function todayISO() { return new Date().toISOString().slice(0, 10); }
+function fmtDate(iso) { if (!iso) return ""; const p = iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; }
+function fmtDateShort(iso) { if (!iso) return ""; const p = iso.split("-"); return `${p[2]}/${p[1]}`; }
 function getCat(id) { return categories.find(c => c.id === id) || { name: "?", color: "#999" }; }
 function getPerson(id) { return people.find(p => p.id === id) || { name: "?", initials: "?", color: "#999" }; }
 function softColor(hex, dark) { return hex + (dark ? "30" : "1F"); }
@@ -750,8 +771,7 @@ function pillHTML(label, color) {
 const VIEWS = [
   { id: "dash",  label: "דשבורד",   icon: "📊" },
   { id: "today", label: "היום שלי", icon: "☀️" },
-  { id: "tasks", label: "משימות",   icon: "📋" },
-  { id: "board", label: "לוח",      icon: "▦" },
+  { id: "board", label: "לוח משימות", icon: "▦" },
   { id: "cal",   label: "לוח שנה",  icon: "📅" },
   { id: "admin", label: "ניהול",    icon: "⚙️" },
 ];
@@ -776,7 +796,6 @@ function renderView() {
   switch (currentView) {
     case "dash":  renderDashboard(el); break;
     case "today": renderToday(el); break;
-    case "tasks": renderTasks(el); break;
     case "board": renderBoard(el); break;
     case "cal":   renderCalendar(el); break;
     case "admin": renderAdmin(el); break;
@@ -789,9 +808,11 @@ function renderView() {
 
 function filteredTasks() {
   let list = tasks;
-  if (searchQuery) {
-    list = list.filter(t => t.title.toLowerCase().includes(searchQuery) || getCat(t.cat).name.toLowerCase().includes(searchQuery));
-  }
+  if (searchQuery) list = list.filter(t => t.title.toLowerCase().includes(searchQuery) || getCat(t.cat).name.toLowerCase().includes(searchQuery));
+  if (statusFilter !== "all") list = list.filter(t => t.status === statusFilter);
+  if (prioFilter !== "all") list = list.filter(t => t.prio === prioFilter);
+  if (catFilter !== "all") list = list.filter(t => t.cat === catFilter);
+  if (personFilter !== "all") list = list.filter(t => (t.tags || []).includes(personFilter));
   return list;
 }
 
@@ -1010,13 +1031,21 @@ function renderTasks(el) {
    BOARD (KANBAN)
    ============================================================ */
 function renderBoard(el) {
-  const ft = filteredTasks();
+  const allTasks = tasks; // kanban always shows all (unfiltered)
+  const ft = filteredTasks(); // filtered list below
+
+  // Filter bar HTML
+  const statusOpts = [["all","הכול"],...Object.entries(STATUS_MAP).map(([k,v])=>[k,v.label])];
+  const prioOpts = [["all","הכול"],...Object.entries(PRIO_MAP).map(([k,v])=>[k,v.label])];
+  const catOpts = [["all","הכול"],...categories.map(c=>[c.id,c.name])];
+  const pplOpts = [["all","הכול"],...people.map(p=>[p.id,p.name])];
+
   el.innerHTML = `
-    <h1 class="page-title">לוח קנבן</h1>
+    <h1 class="page-title">לוח משימות</h1>
     <p class="page-sub">גרור משימות בין העמודות כדי לעדכן סטטוס</p>
     <div class="kanban">
       ${Object.entries(STATUS_MAP).map(([k, s]) => {
-        const items = ft.filter(t => t.status === k);
+        const items = allTasks.filter(t => t.status === k);
         return `
           <div class="kanban-col" ondragover="event.preventDefault();this.style.outline='2px solid var(--violet)'" ondragleave="this.style.outline=''" ondrop="dropTask(event,'${k}');this.style.outline=''">
             <div class="kanban-col-head">
@@ -1035,7 +1064,46 @@ function renderBoard(el) {
             }).join("")}
           </div>`;
       }).join("")}
-    </div>`;
+    </div>
+
+    <!-- TASK LIST WITH FILTERS -->
+    <div style="margin-top:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h2 style="font-size:18px;font-weight:700">📋 רשימת משימות</h2>
+        <span style="font-size:13px;color:var(--text-mute)">${ft.length} מתוך ${tasks.length} משימות</span>
+      </div>
+      <div class="filters-row">
+        <div class="filter-group">
+          <span class="filter-label">סטטוס:</span>
+          <select class="filter-select" onchange="statusFilter=this.value;renderView()">
+            ${statusOpts.map(([k,l])=>`<option value="${k}" ${statusFilter===k?'selected':''}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">תיעדוף:</span>
+          <select class="filter-select" onchange="prioFilter=this.value;renderView()">
+            ${prioOpts.map(([k,l])=>`<option value="${k}" ${prioFilter===k?'selected':''}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">קטגוריה:</span>
+          <select class="filter-select" onchange="catFilter=this.value;renderView()">
+            ${catOpts.map(([k,l])=>`<option value="${k}" ${catFilter===k?'selected':''}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">אדם:</span>
+          <select class="filter-select" onchange="personFilter=this.value;renderView()">
+            ${pplOpts.map(([k,l])=>`<option value="${k}" ${personFilter===k?'selected':''}>${l}</option>`).join("")}
+          </select>
+        </div>
+        ${(statusFilter!=="all"||prioFilter!=="all"||catFilter!=="all"||personFilter!=="all") ? `<button onclick="statusFilter='all';prioFilter='all';catFilter='all';personFilter='all';renderView()" style="font-size:12px;color:var(--red);padding:4px 10px;border-radius:8px;border:1px solid var(--red)">✕ נקה סינון</button>` : ""}
+      </div>
+      <div class="card">
+        ${ft.length ? ft.map(t => taskRowHTML(t)).join("") : '<div class="empty">אין משימות תואמות לסינון</div>'}
+      </div>
+    </div>
+  `;
 }
 
 async function dropTask(e, newStatus) {
@@ -1052,53 +1120,137 @@ async function dropTask(e, newStatus) {
    CALENDAR
    ============================================================ */
 function renderCalendar(el) {
-  const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
-  const first = new Date(y, m, 1).getDay();
-  const days = new Date(y, m + 1, 0).getDate();
-  const monthName = now.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
-  const todayDate = now.getDate();
-
-  // Re-fetch calendar events when viewing
   if (googleAccessToken) fetchCalendarEvents();
+  const calConnected = calendarEvents.length > 0 || googleAccessToken;
+  const modes = [
+    { id: "day", label: "יום" },
+    { id: "3day", label: "3 ימים" },
+    { id: "workweek", label: "שבוע עבודה" },
+    { id: "week", label: "שבוע" },
+    { id: "month", label: "חודש" },
+  ];
+  const bd = calBaseDate;
+  const titleText = calViewMode === "month"
+    ? bd.toLocaleDateString("he-IL", { month: "long", year: "numeric" })
+    : calViewMode === "day"
+    ? bd.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : `${bd.toLocaleDateString("he-IL", { day: "numeric", month: "long" })} — ${getCalEndDate().toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" })}`;
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <h1 class="page-title" style="margin:0">לוח שנה · ${titleText}</h1>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="icon-btn" onclick="calNav(-1)" style="width:32px;height:32px;font-size:16px">→</button>
+        <button onclick="calBaseDate=new Date();renderView()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--text-soft)">היום</button>
+        <button class="icon-btn" onclick="calNav(1)" style="width:32px;height:32px;font-size:16px">←</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${modes.map(m => `<button class="filter-btn ${calViewMode===m.id?'active':''}" onclick="calViewMode='${m.id}';renderView()" style="padding:5px 12px;border-radius:8px;${calViewMode===m.id?'background:var(--violet);color:#fff':'border:1px solid var(--border)'}">${m.label}</button>`).join("")}
+    </div>
+    <p class="page-sub" style="margin-bottom:12px">
+      ${calConnected ? '📅 פגישות מיומן "<b>עבודה</b>" · משימות לפי תאריך יעד' : 'משימות לפי תאריך יעד'}
+    </p>
+    ${calViewMode === "month" ? renderCalMonth() : renderCalColumns()}
+  `;
+}
+
+function calNav(dir) {
+  const d = calBaseDate;
+  if (calViewMode === "month") d.setMonth(d.getMonth() + dir);
+  else if (calViewMode === "day") d.setDate(d.getDate() + dir);
+  else if (calViewMode === "3day") d.setDate(d.getDate() + dir * 3);
+  else if (calViewMode === "workweek" || calViewMode === "week") d.setDate(d.getDate() + dir * 7);
+  renderView();
+}
+
+function getCalDays() {
+  const d = new Date(calBaseDate);
+  if (calViewMode === "day") return [new Date(d)];
+  if (calViewMode === "3day") return [0,1,2].map(i => { const x = new Date(d); x.setDate(x.getDate()+i); return x; });
+  if (calViewMode === "workweek") {
+    const dayOfWeek = d.getDay();
+    const sun = new Date(d); sun.setDate(sun.getDate() - dayOfWeek);
+    return [0,1,2,3,4].map(i => { const x = new Date(sun); x.setDate(x.getDate()+i); return x; });
+  }
+  if (calViewMode === "week") {
+    const dayOfWeek = d.getDay();
+    const sun = new Date(d); sun.setDate(sun.getDate() - dayOfWeek);
+    return [0,1,2,3,4,5,6].map(i => { const x = new Date(sun); x.setDate(x.getDate()+i); return x; });
+  }
+  return [];
+}
+
+function getCalEndDate() {
+  const days = getCalDays();
+  return days.length ? days[days.length - 1] : calBaseDate;
+}
+
+function isoFromDate(d) { return d.toISOString().slice(0, 10); }
+const DAY_NAMES = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+
+function renderCalColumns() {
+  const days = getCalDays();
+  const colCount = days.length;
+  const todayStr = todayISO();
+
+  const cols = days.map(d => {
+    const ds = isoFromDate(d);
+    const isToday = ds === todayStr;
+    const dayTasks = tasks.filter(t => t.due === ds);
+    const dayEvents = calendarEvents.filter(ev => ev.start.startsWith(ds))
+      .sort((a, b) => a.start.localeCompare(b.start));
+
+    const evItems = dayEvents.map(ev => {
+      const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+      return `<div class="cal-col-item cal-event" title="${time}"><span style="font-size:11px;color:var(--coral);font-weight:600">${time}</span> 📅 ${ev.title}</div>`;
+    }).join("");
+
+    const taskItems = dayTasks.map(t => {
+      const S = STATUS_MAP[t.status] || {};
+      return `<div class="cal-col-item" onclick="openDrawer('${t.id}')" style="cursor:pointer;border-right:3px solid ${S.color}">
+        <span class="task-dot" style="background:${S.color};width:8px;height:8px;display:inline-block;border-radius:50;margin-left:6px"></span>${t.title}
+      </div>`;
+    }).join("");
+
+    return `<div class="cal-column" style="flex:1;${isToday?'background:var(--drill-bg)':''}">
+      <div style="text-align:center;padding:10px;font-weight:600;border-bottom:1px solid var(--border-soft)">
+        <div style="font-size:12px;color:var(--text-mute)">${DAY_NAMES[d.getDay()]}</div>
+        <div class="cal-day ${isToday?'today':''}" style="margin:4px auto">${d.getDate()}</div>
+      </div>
+      <div style="padding:6px;min-height:300px">
+        ${evItems}${taskItems}
+        ${!dayEvents.length && !dayTasks.length ? '<div style="text-align:center;padding:20px;font-size:12px;color:var(--text-mute)">—</div>' : ''}
+      </div>
+    </div>`;
+  }).join("");
+
+  return `<div class="card" style="overflow:hidden"><div style="display:flex">${cols}</div></div>`;
+}
+
+function renderCalMonth() {
+  const y = calBaseDate.getFullYear(), m = calBaseDate.getMonth();
+  const first = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayStr = todayISO();
 
   let cells = "";
   for (let i = 0; i < first; i++) cells += '<div class="cal-cell"></div>';
-  for (let d = 1; d <= days; d++) {
+  for (let d = 1; d <= daysInMonth; d++) {
     const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     const dayTasks = tasks.filter(t => t.due === ds);
     const dayEvents = calendarEvents.filter(ev => ev.start.startsWith(ds));
-    const isToday = d === todayDate;
-
-    const evHTML = dayEvents.slice(0, 2).map(ev => {
-      const time = ev.allDay ? "כל היום" : new Date(ev.start).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-      return `<div class="cal-task cal-event" title="${ev.title} · ${time}">📅 ${ev.title}</div>`;
-    }).join("");
-
+    const isToday = ds === todayStr;
+    const evHTML = dayEvents.slice(0, 2).map(ev => `<div class="cal-task cal-event" title="${ev.title}">📅 ${ev.title}</div>`).join("");
     const taskHTML = dayTasks.slice(0, 3 - dayEvents.length).map(t =>
       `<div class="cal-task" style="background:${softColor(STATUS_MAP[t.status]?.color||'#999',isDark())};color:${STATUS_MAP[t.status]?.color||'#999'}" onclick="openDrawer('${t.id}')">${t.title}</div>`
     ).join("");
-
-    cells += `<div class="cal-cell">
-      <div class="cal-day ${isToday?'today':''}">${d}</div>
-      ${evHTML}${taskHTML}
-    </div>`;
+    cells += `<div class="cal-cell"><div class="cal-day ${isToday?'today':''}">${d}</div>${evHTML}${taskHTML}</div>`;
   }
-
-  const calConnected = calendarEvents.length > 0 || googleAccessToken;
-  el.innerHTML = `
-    <h1 class="page-title">לוח שנה · ${monthName}</h1>
-    <p class="page-sub">
-      ${calConnected
-        ? '📅 פגישות מיומן "<b>עבודה</b>" מוצגות · משימות לפי תאריך יעד'
-        : 'משימות לפי תאריך יעד · <span style="color:var(--amber)">⚠️ יומן Google לא מחובר — התנתק והיכנס מחדש כדי לאשר גישה</span>'}
-    </p>
-    <div class="card" style="overflow:hidden">
-      <div class="cal-grid">
-        ${["א","ב","ג","ד","ה","ו","ש"].map(d=>`<div class="cal-head">${d}</div>`).join("")}
-        ${cells}
-      </div>
-    </div>`;
+  return `<div class="card" style="overflow:hidden"><div class="cal-grid">
+    ${["א","ב","ג","ד","ה","ו","ש"].map(d=>`<div class="cal-head">${d}</div>`).join("")}
+    ${cells}
+  </div></div>`;
 }
 
 /* ============================================================
@@ -1167,7 +1319,7 @@ function openDrawer(id) {
           </select>
         </div>
         <div>
-          <div class="field-label">עדיפות</div>
+          <div class="field-label">תיעדוף</div>
           <select class="input" onchange="updateField('${id}','prio',this.value)">
             ${Object.entries(PRIO_MAP).map(([k,v])=>`<option value="${k}" ${k===t.prio?'selected':''}>${v.label}</option>`).join("")}
           </select>
@@ -1230,6 +1382,9 @@ function openDrawer(id) {
         <textarea class="input" placeholder="הוסף הערה…" onblur="updateField('${id}','notes',this.value)">${t.notes||''}</textarea>
       </div>
 
+      <div style="display:flex;gap:8px;padding-top:16px;border-top:1px solid var(--border-soft);margin-top:8px">
+        <button class="btn-primary" onclick="showToast('✓ השינויים נשמרו');closeDrawer()" style="flex:1;justify-content:center;padding:10px">💾 שמור וסגור</button>
+      </div>
       <div style="display:flex;gap:8px;padding-top:8px">
         <button class="btn-outline" onclick="showToast('צרוף קבצים יתווסף בגרסה הבאה')">📎 צרף קובץ</button>
         <button class="btn-outline" style="color:var(--red);border-color:var(--red)" onclick="deleteTask('${id}')">🗑 מחק משימה</button>
@@ -1379,7 +1534,7 @@ function renderAdmin(el) {
       <!-- PRIORITIES -->
       <div class="card admin-section">
         <div class="admin-section-head">
-          <div class="admin-section-title">⚑ עדיפויות</div>
+          <div class="admin-section-title">⚑ תיעדוף</div>
           <span style="font-size:12px;color:var(--text-mute)">רשימה סגורה</span>
         </div>
         ${Object.entries(PRIO_MAP).map(([k, p]) => `
@@ -1392,7 +1547,7 @@ function renderAdmin(el) {
           </div>
         `).join("")}
         <div style="padding:12px 20px;font-size:12px;color:var(--text-mute);border-top:1px solid var(--border-soft)">
-          💡 רמות העדיפות הן חלק מהמנגנון הבסיסי. בעתיד תתווסף אפשרות להתאמה אישית.
+          💡 רמות התיעדוף הן חלק מהמנגנון הבסיסי. בעתיד תתווסף אפשרות להתאמה אישית.
         </div>
       </div>
     </div>
