@@ -561,7 +561,7 @@ let ADMIN_UID = null;
    DATA
    ============================================================ */
 const STATUS_DEFAULTS = {
-  todo:       { label: "לביצוע",     color: "#6366F1", icon: "○" },
+  todo:       { label: "לביצוע",     color: "#64748B", icon: "○" },
   inprogress: { label: "בתהליך",     color: "#F59E0B", icon: "◔" },
   waiting:    { label: "ממתין לאחר", color: "#3B82F6", icon: "⏸" },
   done:       { label: "הושלם",      color: "#10B981", icon: "✓" },
@@ -935,21 +935,24 @@ function renderDashboard(el) {
     <p class="page-sub">יש לך <b style="color:var(--red)">${hot.length} משימות בוערות</b> ו־<b style="color:var(--blue)">${counts.waiting} ממתינות לאחרים</b>. לחיצה על גרף מציגה את המשימות עצמן.</p>
 
     <div class="stats-grid">
-      ${Object.keys(STATUS_MAP).map(k => `
-        <div class="stat-card ${drillFilter?.type==='status'&&drillFilter?.value===k?'active':''}" style="${drillFilter?.type==='status'&&drillFilter?.value===k?`border-color:${STATUS_MAP[k].color}`:''}" onclick="toggleDrill('status','${k}')">
+      ${Object.keys(STATUS_MAP).map(k => {
+        const c = STATUS_MAP[k].color;
+        const on = drillFilter?.type==='status'&&drillFilter?.value===k;
+        return `
+        <div class="stat-card ${on?'active':''}" style="background:${softColor(c,isDark())};border:1px solid ${on?c:softColor(c,isDark())};border-right:5px solid ${c};${on?`box-shadow:0 0 0 2px ${c}55`:''}" onclick="toggleDrill('status','${k}')">
           <div class="stat-top">
-            <span style="color:${STATUS_MAP[k].color};font-size:18px">${STATUS_MAP[k].icon}</span>
-            <span class="stat-num">${counts[k]}</span>
+            <span style="color:${c};font-size:20px">${STATUS_MAP[k].icon}</span>
+            <span class="stat-num" style="color:${c}">${counts[k]}</span>
           </div>
-          <div class="stat-label">${STATUS_MAP[k].label}</div>
-        </div>
-      `).join("")}
-      <div class="stat-card ${drillFilter?.type==='overdue'?'active':''}" style="background:${softColor('#F43F5E',isDark())};${drillFilter?.type==='overdue'?'border-color:var(--red)':''}" onclick="toggleDrill('overdue')">
+          <div class="stat-label" style="color:${c};font-weight:600">${STATUS_MAP[k].label}</div>
+        </div>`;
+      }).join("")}
+      <div class="stat-card ${drillFilter?.type==='overdue'?'active':''}" style="background:${softColor('#F43F5E',isDark())};border:1px solid ${drillFilter?.type==='overdue'?'#F43F5E':softColor('#F43F5E',isDark())};border-right:5px solid #F43F5E;${drillFilter?.type==='overdue'?'box-shadow:0 0 0 2px #F43F5E55':''}" onclick="toggleDrill('overdue')">
         <div class="stat-top">
-          <span style="color:var(--red);font-size:18px">⚑</span>
-          <span class="stat-num" style="color:var(--red)">${overdue}</span>
+          <span style="color:#F43F5E;font-size:20px">⚑</span>
+          <span class="stat-num" style="color:#F43F5E">${overdue}</span>
         </div>
-        <div class="stat-label" style="color:var(--red)">באיחור</div>
+        <div class="stat-label" style="color:#F43F5E;font-weight:600">באיחור</div>
       </div>
     </div>
 
@@ -1715,7 +1718,13 @@ async function tagPerson(taskId, personId) {
 /* ============================================================
    ADMIN PANEL
    ============================================================ */
-const PRESET_COLORS = ["#2BB5A3","#FF8E72","#FFCB6B","#42E6D2","#42B4E6","#F43F5E","#A593FF","#F4ADC8","#84CC16","#F97316","#06B6D4","#14B8A6"];
+const PRESET_COLORS = [
+  "#2BB5A3","#FF8E72","#FFCB6B","#42E6D2","#42B4E6","#F43F5E",
+  "#A593FF","#F4ADC8","#84CC16","#F97316","#06B6D4","#14B8A6",
+  "#8B5CF6","#EC4899","#EF4444","#22C55E","#3B82F6","#EAB308",
+  "#D946EF","#0EA5E9","#10B981","#F59E0B","#6366F1","#DC2626",
+  "#7C3AED","#DB2777","#65A30D","#0891B2","#CA8A04","#9333EA"
+];
 
 function renderAdmin(el) {
   const taskCount = tasks.length;
@@ -1745,13 +1754,13 @@ function renderAdmin(el) {
             </div>
           </div>
         `).join("")}
-        <div class="admin-add-row" style="flex-wrap:wrap">
+        <div class="admin-add-row" style="flex-wrap:wrap;align-items:center">
           <input class="input" id="newCatName" placeholder="שם קטגוריה חדשה…" style="flex:2;min-width:140px">
-          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-            ${PRESET_COLORS.slice(0,8).map(clr => `<div onclick="document.getElementById('newCatColor').value='${clr}';this.parentNode.querySelectorAll('div').forEach(e=>e.style.outline='');this.style.outline='2px solid var(--text)'" style="width:24px;height:24px;border-radius:6px;background:${clr};cursor:pointer"></div>`).join("")}
-            <input type="hidden" id="newCatColor" value="#2BB5A3">
-          </div>
+          <input type="color" id="newCatColor" value="#2BB5A3" style="width:42px;height:36px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:none" title="בחר צבע חופשי">
           <button class="btn-primary" onclick="addCat()" style="white-space:nowrap">+ הוסף</button>
+        </div>
+        <div style="padding:0 20px 12px;display:flex;gap:5px;flex-wrap:wrap">
+          ${PRESET_COLORS.map(clr => `<div onclick="document.getElementById('newCatColor').value='${clr}'" style="width:22px;height:22px;border-radius:5px;background:${clr};cursor:pointer" title="${clr}"></div>`).join("")}
         </div>
       </div>
 
@@ -1776,14 +1785,14 @@ function renderAdmin(el) {
             </div>
           </div>
         `).join("")}
-        <div class="admin-add-row" style="flex-wrap:wrap">
+        <div class="admin-add-row" style="flex-wrap:wrap;align-items:center">
           <input class="input" id="newPersonName" placeholder="שם…" style="min-width:100px">
           <input class="input" id="newPersonEmail" placeholder="מייל…" style="flex:1.5;min-width:140px">
-          <div style="display:flex;gap:4px;align-items:center">
-            ${PRESET_COLORS.slice(0,6).map(clr => `<div onclick="document.getElementById('newPersonColor').value='${clr}';this.parentNode.querySelectorAll('div').forEach(e=>e.style.outline='');this.style.outline='2px solid var(--text)'" style="width:24px;height:24px;border-radius:6px;background:${clr};cursor:pointer"></div>`).join("")}
-            <input type="hidden" id="newPersonColor" value="#42B4E6">
-          </div>
+          <input type="color" id="newPersonColor" value="#42B4E6" style="width:42px;height:36px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:none" title="בחר צבע חופשי">
           <button class="btn-primary" onclick="addPerson()" style="white-space:nowrap">+ הוסף</button>
+        </div>
+        <div style="padding:0 20px 12px;display:flex;gap:5px;flex-wrap:wrap">
+          ${PRESET_COLORS.map(clr => `<div onclick="document.getElementById('newPersonColor').value='${clr}'" style="width:22px;height:22px;border-radius:5px;background:${clr};cursor:pointer" title="${clr}"></div>`).join("")}
         </div>
       </div>
 
@@ -1923,7 +1932,7 @@ function editCatPrompt(id) {
 
 function showEditModal(title, nameVal, colorVal, emailVal, showEmail, onSave) {
   const palette = PRESET_COLORS.map(clr =>
-    `<div onclick="document.getElementById('editColorVal').value='${clr}';document.querySelectorAll('.clr-opt').forEach(e=>e.style.outline='');this.style.outline='3px solid #fff'" class="clr-opt" style="width:32px;height:32px;border-radius:8px;background:${clr};cursor:pointer;${clr===colorVal?'outline:3px solid #fff':''}"></div>`
+    `<div onclick="document.getElementById('editColorVal').value='${clr}'" class="clr-opt" style="width:26px;height:26px;border-radius:6px;background:${clr};cursor:pointer" title="${clr}"></div>`
   ).join("");
   
   const modal = document.createElement("div");
@@ -1935,8 +1944,11 @@ function showEditModal(title, nameVal, colorVal, emailVal, showEmail, onSave) {
     ${showEmail ? `<div class="field"><div class="field-label">מייל</div><input class="input" id="editEmailVal" value="${emailVal}"></div>` : ''}
     <div class="field">
       <div class="field-label">צבע</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${palette}</div>
-      <input type="hidden" id="editColorVal" value="${colorVal}">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+        <input type="color" id="editColorVal" value="${colorVal}" style="width:48px;height:40px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:none">
+        <span style="font-size:13px;color:var(--text-mute)">בחר צבע חופשי או מהפלטה למטה</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${palette}</div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn-cancel" onclick="document.getElementById('editModal').remove()">ביטול</button>
