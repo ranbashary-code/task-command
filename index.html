@@ -1014,19 +1014,20 @@ function renderCharts(counts) {
   const barCtx = document.getElementById("barChart")?.getContext("2d");
   if (!donutCtx || !barCtx) return;
 
-  const textColor = isDark() ? "#B5B0C4" : "#475569";
+  const textColor = isDark() ? "#D4C8ED" : "#3D5654";
+  const dpr = Math.max(2, window.devicePixelRatio || 1);
 
   charts.donut = new Chart(donutCtx, {
     type: "doughnut",
     data: {
       labels: Object.values(STATUS_MAP).map(s => s.label),
       datasets: [{ data: [counts.todo, counts.inprogress, counts.waiting, counts.done],
-        backgroundColor: Object.values(STATUS_MAP).map(s => s.color), borderWidth: 2,
-        borderColor: isDark() ? "#1E1A28" : "#FFFFFF" }]
+        backgroundColor: Object.values(STATUS_MAP).map(s => s.color),
+        borderWidth: 0, borderRadius: 8, spacing: 4, hoverOffset: 8 }]
     },
     options: {
-      cutout: "60%", responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: "left", rtl: true, labels: { color: textColor, font: { family: "Heebo" }, padding: 12 } } },
+      cutout: "68%", responsive: true, maintainAspectRatio: false, devicePixelRatio: dpr,
+      plugins: { legend: { position: "left", rtl: true, labels: { color: textColor, font: { family: "Rubik", size: 13 }, padding: 14, usePointStyle: true, pointStyle: "circle", boxWidth: 8 } } },
       onClick: (e, els) => { if (els.length) { const k = Object.keys(STATUS_MAP)[els[0].index]; toggleDrill("status", k); } }
     }
   });
@@ -1036,12 +1037,12 @@ function renderCharts(counts) {
     type: "bar",
     data: {
       labels: catData.map(c => c.name),
-      datasets: [{ data: catData.map(c => c.count), backgroundColor: catData.map(c => c.color), borderRadius: 6, barThickness: 28 }]
+      datasets: [{ data: catData.map(c => c.count), backgroundColor: catData.map(c => c.color), borderRadius: 8, barThickness: 22 }]
     },
     options: {
-      indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      indexAxis: "y", responsive: true, maintainAspectRatio: false, devicePixelRatio: dpr,
       plugins: { legend: { display: false } },
-      scales: { x: { display: false }, y: { ticks: { color: textColor, font: { family: "Heebo", size: 11 } }, grid: { display: false } } },
+      scales: { x: { display: false }, y: { ticks: { color: textColor, font: { family: "Rubik", size: 12 } }, grid: { display: false }, border: { display: false } } },
       onClick: (e, els) => { if (els.length) { toggleDrill("cat", catData[els[0].index].id); } }
     }
   });
@@ -1365,20 +1366,6 @@ function renderCalColumns() {
     const ds = isoFromDate(d);
     const isToday = ds === todayStr;
 
-    // Current time line (only on today's column)
-    let nowLineHTML = "";
-    if (isToday) {
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      if (nowMin >= START_H * 60 && nowMin <= END_H * 60) {
-        const top = ((nowMin / 60) - START_H) * ROW_H;
-        nowLineHTML = `<div class="now-line" style="position:absolute;top:${top}px;right:0;left:0;z-index:5;pointer-events:none">
-          <div style="height:2px;background:#F43F5E;box-shadow:0 0 6px rgba(244,63,94,.6)"></div>
-          <div style="position:absolute;right:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:#F43F5E"></div>
-        </div>`;
-      }
-    }
-
     // Get events for this day
     const dayEvs = calendarEvents.filter(ev => ev.start.startsWith(ds) && !ev.allDay).map(ev => {
       const s = new Date(ev.start), e = new Date(ev.end);
@@ -1433,16 +1420,32 @@ function renderCalColumns() {
       ${allDayHTML ? `<div style="border-bottom:1px solid var(--border-soft)">${allDayHTML}</div>` : ""}
       <div style="position:relative;height:${totalH}px">
         ${hourLines}
-        ${nowLineHTML}
         ${evsHTML}
       </div>
     </div>`;
   }).join("");
 
+  // Full-width now line (spans entire grid)
+  let fullNowLine = "";
+  const showingToday = days.some(d => isoFromDate(d) === todayStr);
+  if (showingToday) {
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    if (nowMin >= START_H * 60 && nowMin <= END_H * 60) {
+      const top = ((nowMin / 60) - START_H) * ROW_H;
+      const timeLabel = now.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+      fullNowLine = `<div style="position:absolute;top:${top}px;right:0;left:0;z-index:6;pointer-events:none">
+        <div style="position:absolute;right:0;top:-9px;background:#F43F5E;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px">${timeLabel}</div>
+        <div style="height:2px;background:#F43F5E;box-shadow:0 0 8px rgba(244,63,94,.7)"></div>
+      </div>`;
+    }
+  }
+
   return `<div class="card" style="overflow:hidden">
-    <div style="display:flex">
-      <div style="width:54px;flex-shrink:0;padding-top:58px;border-left:1px solid var(--border-soft)">${timeCol}</div>
+    <div style="display:flex;position:relative">
+      <div style="width:54px;flex-shrink:0;padding-top:58px;border-left:1px solid var(--border-soft);position:relative;z-index:2">${timeCol}</div>
       ${dayColsHTML}
+      <div style="position:absolute;top:58px;right:54px;left:0;height:${totalH}px;pointer-events:none">${fullNowLine}</div>
     </div>
   </div>`;
 }
