@@ -167,7 +167,7 @@ a { color: var(--violet); text-decoration: none; }
 .chart-card { padding: 20px; }
 .chart-title { font-weight: 600; margin-bottom: 4px; }
 .chart-sub { font-size: 12px; color: var(--text-mute); margin-bottom: 12px; }
-canvas { max-height: 200px; }
+canvas { max-height: 240px; }
 
 /* DRILL */
 .drill-panel { border-color: var(--violet) !important; margin-bottom: 20px; }
@@ -1010,26 +1010,96 @@ function toggleDrill(type, value) {
 }
 
 function renderCharts(counts) {
-  const donutCtx = document.getElementById("donutChart")?.getContext("2d");
-  const barCtx = document.getElementById("barChart")?.getContext("2d");
-  if (!donutCtx || !barCtx) return;
+  const donutCanvas = document.getElementById("donutChart");
+  const barCanvas = document.getElementById("barChart");
+  if (!donutCanvas || !barCanvas) return;
+  const donutCtx = donutCanvas.getContext("2d");
+  const barCtx = barCanvas.getContext("2d");
 
-  const textColor = isDark() ? "#D4C8ED" : "#3D5654";
+  const textColor = isDark() ? "#E8DEFB" : "#2C2540";
   const dpr = Math.max(2, window.devicePixelRatio || 1);
 
+  function shade(hex, pct) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, gg = (n >> 8) & 255, b = n & 255;
+    r = Math.min(255, Math.max(0, r + Math.round(255 * pct / 100)));
+    gg = Math.min(255, Math.max(0, gg + Math.round(255 * pct / 100)));
+    b = Math.min(255, Math.max(0, b + Math.round(255 * pct / 100)));
+    return `rgb(${r},${gg},${b})`;
+  }
+  function grad(ctx, hex, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h || 220);
+    g.addColorStop(0, shade(hex, 38));
+    g.addColorStop(1, shade(hex, -10));
+    return g;
+  }
+
+  const donutCenterPlugin = {
+    id: "donutCenter",
+    afterDraw(chart) {
+      const { ctx, chartArea } = chart;
+      const total = chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+      const cx = (chartArea.left + chartArea.right) / 2;
+      const cy = (chartArea.top + chartArea.bottom) / 2;
+      ctx.save();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = textColor;
+      ctx.font = "800 30px Rubik";
+      ctx.fillText(total, cx, cy - 6);
+      ctx.font = "500 12px Rubik";
+      ctx.fillStyle = isDark() ? "#A898C8" : "#8CA3A0";
+      ctx.fillText("משימות", cx, cy + 16);
+      const meta = chart.getDatasetMeta(0);
+      meta.data.forEach((arc, i) => {
+        const val = chart.data.datasets[0].data[i];
+        if (!val) return;
+        const ang = (arc.startAngle + arc.endAngle) / 2;
+        const r = (arc.innerRadius + arc.outerRadius) / 2;
+        const x = cx + Math.cos(ang) * r;
+        const y = cy + Math.sin(ang) * r;
+        ctx.fillStyle = "#fff";
+        ctx.font = "700 14px Rubik";
+        ctx.fillText(val, x, y);
+      });
+      ctx.restore();
+    }
+  };
+
+  const barLabelPlugin = {
+    id: "barLabels",
+    afterDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.fillStyle = textColor;
+      ctx.font = "700 13px Rubik";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "left";
+      meta.data.forEach((bar, i) => {
+        const val = chart.data.datasets[0].data[i];
+        if (!val) return;
+        ctx.fillText(val, bar.x + 8, bar.y);
+      });
+      ctx.restore();
+    }
+  };
+
+  const statusColors = Object.values(STATUS_MAP).map(s => s.color);
   charts.donut = new Chart(donutCtx, {
     type: "doughnut",
     data: {
       labels: Object.values(STATUS_MAP).map(s => s.label),
       datasets: [{ data: [counts.todo, counts.inprogress, counts.waiting, counts.done],
-        backgroundColor: Object.values(STATUS_MAP).map(s => s.color),
-        borderWidth: 0, borderRadius: 8, spacing: 4, hoverOffset: 8 }]
+        backgroundColor: statusColors.map(c => grad(donutCtx, c, 320)),
+        borderWidth: 0, borderRadius: 10, spacing: 3, hoverOffset: 10 }]
     },
     options: {
-      cutout: "68%", responsive: true, maintainAspectRatio: false, devicePixelRatio: dpr,
-      plugins: { legend: { position: "left", rtl: true, labels: { color: textColor, font: { family: "Rubik", size: 13 }, padding: 14, usePointStyle: true, pointStyle: "circle", boxWidth: 8 } } },
+      cutout: "62%", responsive: true, maintainAspectRatio: false, devicePixelRatio: dpr,
+      layout: { padding: 10 },
+      plugins: { legend: { position: "left", rtl: true, labels: { color: textColor, font: { family: "Rubik", size: 13, weight: "600" }, padding: 16, usePointStyle: true, pointStyle: "circle", boxWidth: 10 } } },
       onClick: (e, els) => { if (els.length) { const k = Object.keys(STATUS_MAP)[els[0].index]; toggleDrill("status", k); } }
-    }
+    },
+    plugins: [donutCenterPlugin]
   });
 
   const catData = categories.map(c => ({ name: c.name, color: c.color, id: c.id, count: tasks.filter(t => t.cat === c.id && t.status !== "done").length }));
@@ -1037,17 +1107,24 @@ function renderCharts(counts) {
     type: "bar",
     data: {
       labels: catData.map(c => c.name),
-      datasets: [{ data: catData.map(c => c.count), backgroundColor: catData.map(c => c.color), borderRadius: 8, barThickness: 22 }]
+      datasets: [{ data: catData.map(c => c.count),
+        backgroundColor: catData.map(c => {
+          const g = barCtx.createLinearGradient(0, 0, 300, 0);
+          g.addColorStop(0, shade(c.color, -10)); g.addColorStop(1, shade(c.color, 32));
+          return g;
+        }),
+        borderRadius: 8, barThickness: 24 }]
     },
     options: {
       indexAxis: "y", responsive: true, maintainAspectRatio: false, devicePixelRatio: dpr,
+      layout: { padding: { right: 28 } },
       plugins: { legend: { display: false } },
-      scales: { x: { display: false }, y: { ticks: { color: textColor, font: { family: "Rubik", size: 12 } }, grid: { display: false }, border: { display: false } } },
+      scales: { x: { display: false, grace: "15%" }, y: { ticks: { color: textColor, font: { family: "Rubik", size: 12, weight: "600" } }, grid: { display: false }, border: { display: false } } },
       onClick: (e, els) => { if (els.length) { toggleDrill("cat", catData[els[0].index].id); } }
-    }
+    },
+    plugins: [barLabelPlugin]
   });
 }
-
 /* ============================================================
    TASK ROW HTML (shared)
    ============================================================ */
