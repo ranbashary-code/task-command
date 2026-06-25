@@ -215,7 +215,7 @@ canvas { max-height: 200px; }
 .cal-head { text-align: center; padding: 10px; font-size: 12px; font-weight: 600; color: var(--text-mute); }
 .cal-cell { min-height: 90px; padding: 6px; border-bottom: 1px solid var(--border-soft); border-left: 1px solid var(--border-soft); }
 .cal-day { font-size: 12px; font-weight: 600; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 4px; }
-.cal-day.today { background: var(--violet); color: #fff; }
+.cal-day.today { background: linear-gradient(135deg, #FF8E72, #FFCB6B); color: #1A2C2A; font-weight: 800; box-shadow: 0 2px 8px rgba(255,142,114,.4); }
 .cal-task {
   font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
@@ -561,7 +561,7 @@ let ADMIN_UID = null;
    DATA
    ============================================================ */
 const STATUS_DEFAULTS = {
-  todo:       { label: "לביצוע",     color: "#64748B", icon: "○" },
+  todo:       { label: "לביצוע",     color: "#8B5CF6", icon: "○" },
   inprogress: { label: "בתהליך",     color: "#F59E0B", icon: "◔" },
   waiting:    { label: "ממתין לאחר", color: "#3B82F6", icon: "⏸" },
   done:       { label: "הושלם",      color: "#10B981", icon: "✓" },
@@ -795,6 +795,8 @@ async function fetchCalendarEvents() {
 
 // Auto-refresh calendar every 2 minutes
 setInterval(() => { if (googleAccessToken) fetchCalendarEvents(); }, 120000);
+// Update "now" line every minute when on calendar
+setInterval(() => { if (currentView === "cal" && calViewMode !== "month") renderView(); }, 60000);
 
 /* ============================================================
    HELPERS
@@ -1363,6 +1365,20 @@ function renderCalColumns() {
     const ds = isoFromDate(d);
     const isToday = ds === todayStr;
 
+    // Current time line (only on today's column)
+    let nowLineHTML = "";
+    if (isToday) {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      if (nowMin >= START_H * 60 && nowMin <= END_H * 60) {
+        const top = ((nowMin / 60) - START_H) * ROW_H;
+        nowLineHTML = `<div class="now-line" style="position:absolute;top:${top}px;right:0;left:0;z-index:5;pointer-events:none">
+          <div style="height:2px;background:#F43F5E;box-shadow:0 0 6px rgba(244,63,94,.6)"></div>
+          <div style="position:absolute;right:-5px;top:-4px;width:10px;height:10px;border-radius:50%;background:#F43F5E"></div>
+        </div>`;
+      }
+    }
+
     // Get events for this day
     const dayEvs = calendarEvents.filter(ev => ev.start.startsWith(ds) && !ev.allDay).map(ev => {
       const s = new Date(ev.start), e = new Date(ev.end);
@@ -1409,14 +1425,15 @@ function renderCalColumns() {
       `<div style="background:linear-gradient(120deg,rgba(255,142,114,0.2),rgba(255,203,107,0.12));border-right:3px solid var(--coral);border-radius:4px;padding:3px 6px;margin:2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b style="color:var(--coral)">כל היום</b> ${ev.title}</div>`
     ).join("");
 
-    return `<div style="flex:1;border-left:1px solid var(--border-soft);${isToday?'background:var(--drill-bg)':''}">
-      <div style="text-align:center;padding:8px;font-weight:600;border-bottom:2px solid var(--border)">
-        <div style="font-size:11px;color:var(--text-mute)">${DAY_NAMES[d.getDay()]}</div>
+    return `<div style="flex:1;border-left:1px solid var(--border-soft);${isToday?'background:rgba(255,142,114,0.06)':''}">
+      <div style="text-align:center;padding:8px;font-weight:600;border-bottom:2px solid ${isToday?'#FF8E72':'var(--border)'}">
+        <div style="font-size:11px;color:${isToday?'#FF8E72':'var(--text-mute)'}">${DAY_NAMES[d.getDay()]}</div>
         <div class="cal-day ${isToday?'today':''}" style="margin:4px auto">${d.getDate()}</div>
       </div>
       ${allDayHTML ? `<div style="border-bottom:1px solid var(--border-soft)">${allDayHTML}</div>` : ""}
       <div style="position:relative;height:${totalH}px">
         ${hourLines}
+        ${nowLineHTML}
         ${evsHTML}
       </div>
     </div>`;
@@ -1723,7 +1740,7 @@ const PRESET_COLORS = [
   "#A593FF","#F4ADC8","#84CC16","#F97316","#06B6D4","#14B8A6",
   "#8B5CF6","#EC4899","#EF4444","#22C55E","#3B82F6","#EAB308",
   "#D946EF","#0EA5E9","#10B981","#F59E0B","#6366F1","#DC2626",
-  "#7C3AED","#DB2777","#65A30D","#0891B2","#CA8A04","#9333EA"
+  "#FFFFFF","#E2E8F0","#94A3B8","#64748B","#334155","#0F172A"
 ];
 
 function renderAdmin(el) {
@@ -1760,7 +1777,7 @@ function renderAdmin(el) {
           <button class="btn-primary" onclick="addCat()" style="white-space:nowrap">+ הוסף</button>
         </div>
         <div style="padding:0 20px 12px;display:flex;gap:5px;flex-wrap:wrap">
-          ${PRESET_COLORS.map(clr => `<div onclick="document.getElementById('newCatColor').value='${clr}'" style="width:22px;height:22px;border-radius:5px;background:${clr};cursor:pointer" title="${clr}"></div>`).join("")}
+          ${PRESET_COLORS.map(clr => `<div onclick="document.getElementById('newCatColor').value='${clr}'" style="width:22px;height:22px;border-radius:5px;background:${clr};cursor:pointer;border:1px solid var(--border)" title="${clr}"></div>`).join("")}
         </div>
       </div>
 
@@ -1792,7 +1809,7 @@ function renderAdmin(el) {
           <button class="btn-primary" onclick="addPerson()" style="white-space:nowrap">+ הוסף</button>
         </div>
         <div style="padding:0 20px 12px;display:flex;gap:5px;flex-wrap:wrap">
-          ${PRESET_COLORS.map(clr => `<div onclick="document.getElementById('newPersonColor').value='${clr}'" style="width:22px;height:22px;border-radius:5px;background:${clr};cursor:pointer" title="${clr}"></div>`).join("")}
+          ${PRESET_COLORS.map(clr => `<div onclick="document.getElementById('newPersonColor').value='${clr}'" style="width:22px;height:22px;border-radius:5px;background:${clr};cursor:pointer;border:1px solid var(--border)" title="${clr}"></div>`).join("")}
         </div>
       </div>
 
@@ -1932,7 +1949,7 @@ function editCatPrompt(id) {
 
 function showEditModal(title, nameVal, colorVal, emailVal, showEmail, onSave) {
   const palette = PRESET_COLORS.map(clr =>
-    `<div onclick="document.getElementById('editColorVal').value='${clr}'" class="clr-opt" style="width:26px;height:26px;border-radius:6px;background:${clr};cursor:pointer" title="${clr}"></div>`
+    `<div onclick="document.getElementById('editColorVal').value='${clr}'" class="clr-opt" style="width:26px;height:26px;border-radius:6px;background:${clr};cursor:pointer;border:1px solid var(--border)" title="${clr}"></div>`
   ).join("");
   
   const modal = document.createElement("div");
