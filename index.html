@@ -499,6 +499,10 @@ textarea.input { resize: none; min-height: 70px; }
   <div class="add-card" onclick="event.stopPropagation()">
     <div class="add-head">משימה חדשה <button onclick="closeAddModal()" style="color:var(--text-mute);font-size:20px">✕</button></div>
     <div class="add-body">
+      <div class="field" id="templatePickerWrap" style="margin-bottom:12px">
+        <div class="field-label">התחל מתבנית (אופציונלי)</div>
+        <select class="input" id="addTemplate" onchange="applyTemplate(this.value)"><option value="">— ללא תבנית —</option></select>
+      </div>
       <div class="field"><input class="input" id="addTitle" placeholder="כותרת המשימה…"></div>
       <div class="field-row" style="margin-bottom:12px">
         <select class="input" id="addCat"></select>
@@ -508,12 +512,25 @@ textarea.input { resize: none; min-height: 70px; }
           <option value="low">תיעדוף נמוך</option>
         </select>
       </div>
-      <div class="field-row">
+      <div class="field-row" style="margin-bottom:12px">
         <input class="input" type="date" id="addDue">
         <input class="input" type="number" id="addEst" placeholder="שעות הערכה" value="2" min="0">
       </div>
+      <div class="field">
+        <div class="field-label">חזרתיות</div>
+        <select class="input" id="addRecur">
+          <option value="none">ללא — משימה חד-פעמית</option>
+          <option value="daily">כל יום</option>
+          <option value="weekly">כל שבוע</option>
+          <option value="biweekly">כל שבועיים</option>
+          <option value="monthly">כל חודש</option>
+        </select>
+      </div>
     </div>
     <div class="add-foot">
+      <label style="display:flex;align-items:center;gap:6px;margin-left:auto;font-size:13px;color:var(--text-soft);cursor:pointer">
+        <input type="checkbox" id="addSaveTemplate"> שמור גם כתבנית
+      </label>
       <button class="btn-cancel" onclick="closeAddModal()">ביטול</button>
       <button class="btn-submit" onclick="addTask()">הוספה</button>
     </div>
@@ -543,17 +560,19 @@ let ADMIN_UID = null;
 /* ============================================================
    DATA
    ============================================================ */
-const STATUS_MAP = {
+const STATUS_DEFAULTS = {
   todo:       { label: "לביצוע",     color: "#6366F1", icon: "○" },
   inprogress: { label: "בתהליך",     color: "#F59E0B", icon: "◔" },
   waiting:    { label: "ממתין לאחר", color: "#3B82F6", icon: "⏸" },
   done:       { label: "הושלם",      color: "#10B981", icon: "✓" },
 };
-const PRIO_MAP = {
+const PRIO_DEFAULTS = {
   high:   { label: "גבוה",  color: "#F43F5E" },
   medium: { label: "בינוני", color: "#F59E0B" },
   low:    { label: "נמוך",  color: "#10B981" },
 };
+const STATUS_MAP = JSON.parse(JSON.stringify(STATUS_DEFAULTS));
+const PRIO_MAP = JSON.parse(JSON.stringify(PRIO_DEFAULTS));
 const DEFAULT_CATS = [
   { id: "c1", name: "אסטרטגיה דיגיטלית", color: "#2BB5A3" },
   { id: "c2", name: "פרויקטי אגף",        color: "#42B4E6" },
@@ -565,6 +584,8 @@ let tasks = [];
 let categories = [];
 let people = [];
 let activityLog = [];
+let templates = [];
+let savedFilters = [];
 let currentView = "dash";
 let drillFilter = null;
 let statusFilter = "all";
@@ -687,18 +708,57 @@ async function initData() {
     activityLog = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (currentView === "dash") renderView();
   });
+
+  // Load status/priority customizations (labels + colors)
+  const cfgSnap = await userDoc("config").doc("labels").get();
+  if (cfgSnap.exists) {
+    const cfg = cfgSnap.data();
+    if (cfg.status) Object.keys(cfg.status).forEach(k => { if (STATUS_MAP[k]) Object.assign(STATUS_MAP[k], cfg.status[k]); });
+    if (cfg.prio) Object.keys(cfg.prio).forEach(k => { if (PRIO_MAP[k]) Object.assign(PRIO_MAP[k], cfg.prio[k]); });
+  }
+
+  // Load templates
+  userDoc("templates").onSnapshot(snap => {
+    templates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    updateTemplateSelect();
+    if (currentView === "admin") renderView();
+  });
+
+  // Load saved filters
+  userDoc("filters").onSnapshot(snap => {
+    savedFilters = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (currentView === "board") renderView();
+  });
+
+  // Process recurring tasks - create next occurrence when one is completed
+  checkRecurring();
+}
+
+function updateTemplateSelect() {
+  const sel = document.getElementById("addTemplate");
+  if (sel) sel.innerHTML = '<option value="">— ללא תבנית —</option>' + templates.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
 }
 
 /* ============================================================
    GOOGLE CALENDAR INTEGRATION
    ============================================================ */
+let calTokenExpired = false;
 async function fetchCalendarEvents() {
   if (!googleAccessToken) return;
   try {
     const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
       headers: { Authorization: "Bearer " + googleAccessToken }
     });
+    if (listRes.status === 401 || listRes.status === 403) {
+      // Token expired
+      calTokenExpired = true;
+      googleAccessToken = null;
+      try { sessionStorage.removeItem("tc-gtoken"); } catch(e) {}
+      if (currentView === "cal" || currentView === "today") renderView();
+      return;
+    }
     if (!listRes.ok) { console.warn("Calendar API:", listRes.status); return; }
+    calTokenExpired = false;
     const listData = await listRes.json();
     
     // Find work calendar - flexible matching
@@ -1187,10 +1247,15 @@ async function dropTask(e, newStatus) {
   e.preventDefault();
   const id = e.dataTransfer.getData("text");
   if (!id) return;
-  await userDoc("tasks").doc(id).update({ status: newStatus, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   const t = tasks.find(x => x.id === id);
+  await userDoc("tasks").doc(id).update({ status: newStatus, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   await logActivity("עדכן סטטוס ל" + STATUS_MAP[newStatus].label, t?.title || "");
-  showToast(`עודכן ל"${STATUS_MAP[newStatus].label}"`);
+  if (newStatus === "done" && t && t.recur && t.recur !== "none") {
+    await spawnRecurrence(t);
+    showToast(`✓ הושלם · נוצרה החזרה הבאה (${{daily:'מחר',weekly:'שבוע הבא',biweekly:'בעוד שבועיים',monthly:'חודש הבא'}[t.recur]})`);
+  } else {
+    showToast(`עודכן ל"${STATUS_MAP[newStatus].label}"`);
+  }
 }
 
 /* ============================================================
@@ -1220,15 +1285,17 @@ function renderCalendar(el) {
         <button class="icon-btn" onclick="calNav(-1)" style="width:32px;height:32px;font-size:16px">→</button>
         <button onclick="calBaseDate=new Date();renderView()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--text-soft)">היום</button>
         <button class="icon-btn" onclick="calNav(1)" style="width:32px;height:32px;font-size:16px">←</button>
-        <button class="icon-btn" onclick="fetchCalendarEvents();showToast('🔄 מרענן יומן…')" title="רענן יומן" style="width:32px;height:32px;font-size:15px">🔄</button>
+        <button onclick="fetchCalendarEvents();showToast('🔄 מרענן יומן…')" style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;background:var(--violet);color:#fff;font-size:13px;font-weight:600">🔄 רענן יומן</button>
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       ${modes.map(m => `<button class="filter-btn ${calViewMode===m.id?'active':''}" onclick="calViewMode='${m.id}';try{localStorage.setItem('tc-calview','${m.id}')}catch(e){};renderView()" style="padding:5px 12px;border-radius:8px;${calViewMode===m.id?'background:var(--violet);color:#fff':'border:1px solid var(--border)'}">${m.label}</button>`).join("")}
     </div>
     <p class="page-sub" style="margin-bottom:12px">
-      ${calConnected
-        ? '📅 פגישות מיומן "<b>עבודה</b>"'
+      ${calTokenExpired
+        ? '⚠️ החיבור ליומן פג תוקף · <button onclick="reconnectCalendar()" style="color:var(--coral);font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;font-family:inherit">לחץ כאן לחיבור מחדש</button>'
+        : calConnected
+        ? '📅 פגישות מיומן "<b>עבודה</b>" · מתעדכן אוטומטית כל 2 דק׳'
         : '⚠️ יומן Google לא מחובר · <button onclick="reconnectCalendar()" style="color:var(--coral);font-weight:600;text-decoration:underline;background:none;border:none;cursor:pointer;font-size:inherit;font-family:inherit">לחץ כאן לחיבור היומן</button>'}
     </p>
     ${calViewMode === "month" ? renderCalMonth() : renderCalColumns()}
@@ -1394,13 +1461,30 @@ function openAddModal() {
   document.getElementById("addTitle").value = "";
   document.getElementById("addDue").value = todayISO();
   document.getElementById("addEst").value = "2";
+  document.getElementById("addRecur").value = "none";
+  const tpl = document.getElementById("addTemplate"); if (tpl) tpl.value = "";
+  const sv = document.getElementById("addSaveTemplate"); if (sv) sv.checked = false;
+  window._tplSubtasks = [];
+  updateTemplateSelect();
   setTimeout(() => document.getElementById("addTitle").focus(), 100);
 }
 function closeAddModal() { document.getElementById("addModal").classList.remove("open"); }
 
+function applyTemplate(tid) {
+  if (!tid) { window._tplSubtasks = []; return; }
+  const tpl = templates.find(t => t.id === tid);
+  if (!tpl) return;
+  document.getElementById("addTitle").value = tpl.title || tpl.name || "";
+  document.getElementById("addCat").value = tpl.cat || categories[0]?.id;
+  document.getElementById("addPrio").value = tpl.prio || "medium";
+  document.getElementById("addEst").value = tpl.est || 2;
+  window._tplSubtasks = (tpl.subtasks || []).map(s => ({ id: "s"+Date.now()+Math.random(), text: s.text, done: false }));
+}
+
 async function addTask() {
   const title = document.getElementById("addTitle").value.trim();
   if (!title) return;
+  const recur = document.getElementById("addRecur").value;
   const task = {
     title,
     cat: document.getElementById("addCat").value,
@@ -1412,15 +1496,55 @@ async function addTask() {
     tags: [],
     project: "",
     notes: "",
-    subtasks: [],
+    subtasks: window._tplSubtasks || [],
+    recur: recur,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   await userDoc("tasks").add(task);
   await logActivity("יצר משימה", title);
+
+  // Save as template if requested
+  if (document.getElementById("addSaveTemplate")?.checked) {
+    await userDoc("templates").add({
+      name: title, title, cat: task.cat, prio: task.prio, est: task.est,
+      subtasks: (task.subtasks || []).map(s => ({ text: s.text })),
+    });
+    showToast("✓ משימה + תבנית נשמרו");
+  } else {
+    showToast("✓ משימה נוספה");
+  }
+  window._tplSubtasks = [];
   closeAddModal();
-  showToast("✓ משימה נוספה");
 }
+
+/* Recurring: when a recurring task is marked done, spawn the next occurrence */
+function nextRecurDate(dateStr, recur) {
+  const d = new Date(dateStr);
+  if (recur === "daily") d.setDate(d.getDate() + 1);
+  else if (recur === "weekly") d.setDate(d.getDate() + 7);
+  else if (recur === "biweekly") d.setDate(d.getDate() + 14);
+  else if (recur === "monthly") d.setMonth(d.getMonth() + 1);
+  return isoFromDate(d);
+}
+
+async function spawnRecurrence(task) {
+  if (!task.recur || task.recur === "none") return;
+  const nextDue = nextRecurDate(task.due, task.recur);
+  // Avoid duplicate: check if a task with same title+due already exists
+  if (tasks.some(t => t.title === task.title && t.due === nextDue && t.recur === task.recur)) return;
+  await userDoc("tasks").add({
+    title: task.title, cat: task.cat, status: "todo", prio: task.prio,
+    due: nextDue, est: task.est || 2, spent: 0, tags: task.tags || [],
+    project: task.project || "", notes: task.notes || "",
+    subtasks: (task.subtasks || []).map(s => ({ id: "s"+Date.now()+Math.random(), text: s.text, done: false })),
+    recur: task.recur,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+function checkRecurring() { /* placeholder for future scheduled processing */ }
 
 /* ============================================================
    DRAWER (TASK DETAIL)
@@ -1464,12 +1588,19 @@ function openDrawer(id) {
           <input type="date" class="input" value="${t.due||''}" onchange="updateField('${id}','due',this.value)">
         </div>
         <div>
-          <div class="field-label">זמן (שעות)</div>
-          <div style="display:flex;align-items:center;gap:8px;padding-top:8px;font-size:13px">
-            🕐 ${t.spent||0} / ${t.est||0}
-            <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,(t.spent||0)/(t.est||1)*100)}%"></div></div>
-          </div>
+          <div class="field-label">חזרתיות</div>
+          <select class="input" onchange="updateField('${id}','recur',this.value)">
+            <option value="none" ${(!t.recur||t.recur==='none')?'selected':''}>ללא</option>
+            <option value="daily" ${t.recur==='daily'?'selected':''}>כל יום</option>
+            <option value="weekly" ${t.recur==='weekly'?'selected':''}>כל שבוע</option>
+            <option value="biweekly" ${t.recur==='biweekly'?'selected':''}>כל שבועיים</option>
+            <option value="monthly" ${t.recur==='monthly'?'selected':''}>כל חודש</option>
+          </select>
         </div>
+      </div>
+      <div class="field">
+        <div class="field-label">זמן (שעות): ${t.spent||0} / ${t.est||0}</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,(t.spent||0)/(t.est||1)*100)}%"></div></div>
       </div>
 
       <div class="field">
@@ -1530,9 +1661,15 @@ function openDrawer(id) {
 function closeDrawer() { document.getElementById("drawerOverlay").classList.remove("open"); }
 
 async function updateField(id, field, value) {
-  await userDoc("tasks").doc(id).update({ [field]: value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   const t = tasks.find(x => x.id === id);
-  if (field === "status") await logActivity("עדכן סטטוס ל" + STATUS_MAP[value]?.label, t?.title || "");
+  await userDoc("tasks").doc(id).update({ [field]: value, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  if (field === "status") {
+    await logActivity("עדכן סטטוס ל" + STATUS_MAP[value]?.label, t?.title || "");
+    if (value === "done" && t && t.recur && t.recur !== "none") {
+      await spawnRecurrence(t);
+      showToast("✓ הושלם · נוצרה החזרה הבאה");
+    }
+  }
 }
 
 async function deleteTask(id) {
@@ -1654,19 +1791,22 @@ function renderAdmin(el) {
       <div class="card admin-section">
         <div class="admin-section-head">
           <div class="admin-section-title">🔄 סטטוסים</div>
-          <span style="font-size:12px;color:var(--text-mute)">רשימה סגורה</span>
+          <span style="font-size:12px;color:var(--text-mute)">שם וצבע ניתנים לעריכה</span>
         </div>
         ${Object.entries(STATUS_MAP).map(([k, s]) => `
           <div class="admin-item">
             <div class="color-dot" style="background:${s.color}"></div>
             <div class="admin-item-info">
               <div class="admin-item-name">${s.label}</div>
-              <div class="admin-item-sub">${tasks.filter(t => t.status === k).length} משימות · מזהה: ${k}</div>
+              <div class="admin-item-sub">${tasks.filter(t => t.status === k).length} משימות</div>
+            </div>
+            <div class="admin-actions">
+              <button class="admin-btn" onclick="editStatusPrompt('${k}')" title="ערוך">✏️</button>
             </div>
           </div>
         `).join("")}
         <div style="padding:12px 20px;font-size:12px;color:var(--text-mute);border-top:1px solid var(--border-soft)">
-          💡 הסטטוסים הם חלק מהמנגנון הבסיסי של המערכת. בעתיד תתווסף אפשרות להתאמה אישית.
+          💡 ניתן לערוך שם וצבע. הסטטוסים עצמם (לביצוע/בתהליך/ממתין/הושלם) קבועים כי הם חלק ממנגנון המערכת.
         </div>
       </div>
 
@@ -1674,20 +1814,43 @@ function renderAdmin(el) {
       <div class="card admin-section">
         <div class="admin-section-head">
           <div class="admin-section-title">⚑ תיעדוף</div>
-          <span style="font-size:12px;color:var(--text-mute)">רשימה סגורה</span>
+          <span style="font-size:12px;color:var(--text-mute)">שם וצבע ניתנים לעריכה</span>
         </div>
         ${Object.entries(PRIO_MAP).map(([k, p]) => `
           <div class="admin-item">
             <div class="color-dot" style="background:${p.color}"></div>
             <div class="admin-item-info">
               <div class="admin-item-name">${p.label}</div>
-              <div class="admin-item-sub">${tasks.filter(t => t.prio === k).length} משימות · מזהה: ${k}</div>
+              <div class="admin-item-sub">${tasks.filter(t => t.prio === k).length} משימות</div>
+            </div>
+            <div class="admin-actions">
+              <button class="admin-btn" onclick="editPrioPrompt('${k}')" title="ערוך">✏️</button>
             </div>
           </div>
         `).join("")}
         <div style="padding:12px 20px;font-size:12px;color:var(--text-mute);border-top:1px solid var(--border-soft)">
-          💡 רמות התיעדוף הן חלק מהמנגנון הבסיסי. בעתיד תתווסף אפשרות להתאמה אישית.
+          💡 ניתן לערוך שם וצבע. רמות התיעדוף (גבוה/בינוני/נמוך) קבועות.
         </div>
+      </div>
+
+      <!-- TEMPLATES -->
+      <div class="card admin-section">
+        <div class="admin-section-head">
+          <div class="admin-section-title">📑 תבניות משימה</div>
+          <span style="font-size:12px;color:var(--text-mute)">${templates.length} תבניות</span>
+        </div>
+        ${templates.length ? templates.map(t => `
+          <div class="admin-item">
+            <div class="color-dot" style="background:${getCat(t.cat).color}"></div>
+            <div class="admin-item-info">
+              <div class="admin-item-name">${t.name}</div>
+              <div class="admin-item-sub">${getCat(t.cat).name} · ${(t.subtasks||[]).length} תתי-משימות</div>
+            </div>
+            <div class="admin-actions">
+              <button class="admin-btn danger" onclick="deleteTemplate('${t.id}')" title="מחק">🗑</button>
+            </div>
+          </div>
+        `).join("") : '<div style="padding:16px 20px;font-size:13px;color:var(--text-mute)">אין תבניות עדיין. צור משימה וסמן "שמור גם כתבנית".</div>'}
       </div>
     </div>
 
@@ -1720,6 +1883,36 @@ async function addCat() {
   updateCatSelect();
   showToast("✓ קטגוריה נוספה");
   renderView();
+}
+
+function editStatusPrompt(key) {
+  const s = STATUS_MAP[key];
+  showEditModal("עריכת סטטוס", s.label, s.color, "", false, async (name, color) => {
+    STATUS_MAP[key].label = name; STATUS_MAP[key].color = color;
+    await saveLabelConfig();
+    showToast("✓ סטטוס עודכן"); renderView();
+  });
+}
+
+function editPrioPrompt(key) {
+  const p = PRIO_MAP[key];
+  showEditModal("עריכת תיעדוף", p.label, p.color, "", false, async (name, color) => {
+    PRIO_MAP[key].label = name; PRIO_MAP[key].color = color;
+    await saveLabelConfig();
+    showToast("✓ תיעדוף עודכן"); renderView();
+  });
+}
+
+async function saveLabelConfig() {
+  const status = {}; Object.keys(STATUS_MAP).forEach(k => status[k] = { label: STATUS_MAP[k].label, color: STATUS_MAP[k].color });
+  const prio = {}; Object.keys(PRIO_MAP).forEach(k => prio[k] = { label: PRIO_MAP[k].label, color: PRIO_MAP[k].color });
+  await userDoc("config").doc("labels").set({ status, prio });
+}
+
+async function deleteTemplate(id) {
+  if (!confirm("למחוק את התבנית?")) return;
+  await userDoc("templates").doc(id).delete();
+  showToast("🗑 תבנית נמחקה");
 }
 
 function editCatPrompt(id) {
